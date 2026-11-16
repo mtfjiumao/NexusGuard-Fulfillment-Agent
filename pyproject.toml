@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling>=1.26,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nexusguard-fulfillment-agent"
+version = "0.1.0"
+description = "Policy-driven e-commerce fulfillment and after-sales agent"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.34,<1",
+    "pydantic-settings>=2.7,<3",
+    "sqlalchemy[asyncio]>=2.0.36,<3",
+    "asyncpg>=0.30,<1",
+    "redis>=5.2,<7",
+    "alembic>=1.14,<2",
+    "httpx>=0.28,<1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3,<10", "ruff>=0.11,<1"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nexusguard"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

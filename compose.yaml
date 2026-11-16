@@ -1,0 +1,50 @@
+# 仅供本地开发：生产环境需使用独立凭据、TLS、备份与网络隔离。
+services:
+  api:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      NEXUSGUARD_ENVIRONMENT: development
+      NEXUSGUARD_DATABASE_URL: postgresql+asyncpg://nexusguard:nexusguard_dev@postgres:5432/nexusguard
+      NEXUSGUARD_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready', timeout=5)"]
+      interval: 15s
+      timeout: 6s
+      retries: 3
+    init: true
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: nexusguard
+      POSTGRES_USER: nexusguard
+      POSTGRES_PASSWORD: nexusguard_dev
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexusguard -d nexusguard"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_data:
