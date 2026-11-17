@@ -7,9 +7,9 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
 from nexusguard.core.config import get_settings
+from nexusguard.infrastructure import models  # noqa: F401
 from nexusguard.infrastructure.database import Base
 
-# Import ORM models here when the first business migration is implemented.
 target_metadata = Base.metadata
 
 
@@ -42,5 +42,7 @@ async def run_migrations_online() -> None:
 
 if context.is_offline_mode():
     run_migrations_offline()
+elif connection := context.config.attributes.get("connection"):
+    apply_migrations(connection)
 else:
     asyncio.run(run_migrations_online())

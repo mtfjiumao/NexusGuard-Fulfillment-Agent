@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="930" viewBox="0 0 1100 930" role="img" aria-labelledby="title desc">
+<title id="title">客服 Agent：小模型路由、大模型对话、后端授权</title>
+<desc id="desc">新消息持久化后由小模型识别，后端确认订单，再交大模型使用白名单工具。破损收集先预演回滚，最终草稿、回复、审计原子提交。失败不保存半份草稿，没有资金工具。</desc>
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#526680"/></marker></defs>
+<rect width="1100" height="930" fill="#f5f7fb"/>
+<g font-family="sans-serif" fill="#14243b" text-anchor="middle">
+<text x="550" y="43" font-size="25" font-weight="700">客服 Agent 的对话与工具循环</text>
+<text x="550" y="72" font-size="16">模型负责理解和推进 · 后端负责事实、状态与权限</text>
+<g stroke="#526680" stroke-width="2" marker-end="url(#arrow)" fill="none">
+<path d="M550 150V180"/><path d="M550 255V290"/><path d="M550 375V415"/>
+<path d="M760 330H875V240"/><path d="M550 500V540"/><path d="M550 625V670"/>
+<path d="M340 582H240V455H340"/><path d="M550 750V795"/>
+<path d="M760 455H930V710H760" stroke-dasharray="6 5"/>
+</g>
+<rect x="340" y="100" width="420" height="50" rx="10" fill="#e4ecfa" stroke="#7296c4"/>
+<text x="550" y="132" font-size="17">保存新消息与 Outbox · Worker 领取</text>
+<rect x="340" y="180" width="420" height="75" rx="10" fill="#e4ecfa" stroke="#7296c4"/>
+<text x="550" y="210" font-size="18" font-weight="700">qwen3.8-flash：意图与订单指向</text>
+<text x="550" y="237" font-size="15">新输入识别一次；选单恢复复用原意图</text>
+<rect x="340" y="290" width="420" height="85" rx="10" fill="#fff0d9" stroke="#be934a"/>
+<text x="550" y="320" font-size="18" font-weight="700">后端核验身份、订单归属和确认状态</text>
+<text x="550" y="349" font-size="15">不把候选订单自动绑定 · 注入辅助拦截</text>
+<rect x="790" y="155" width="260" height="85" rx="10" fill="#fff0d9" stroke="#be934a"/>
+<text x="920" y="187" font-size="17">订单不明确 → 等待用户选单</text>
+<text x="920" y="217" font-size="15">选定后继续处理保存的原问题</text>
+<rect x="340" y="415" width="420" height="85" rx="10" fill="#e6e0fb" stroke="#917fc2"/>
+<text x="550" y="446" font-size="18" font-weight="700">qwen4-max：上下文、工具选择与回复</text>
+<text x="550" y="476" font-size="15">默认最多 5 次调用 · 最后一次必须回复</text>
+<rect x="340" y="540" width="420" height="85" rx="10" fill="#dff2e9" stroke="#62a087"/>
+<text x="550" y="570" font-size="18" font-weight="700">后端白名单工具与参数校验</text>
+<text x="550" y="599" font-size="15">订单 / 物流 / SKU / 售后查询 / 破损草稿</text>
+<text x="155" y="535" font-size="15">工具结果返回模型</text>
+<text x="155" y="560" font-size="15">破损变更预演并回滚</text>
+<text x="155" y="585" font-size="15">网络期间无数据库锁</text>
+<rect x="340" y="670" width="420" height="80" rx="10" fill="#fff0d9" stroke="#be934a"/>
+<text x="550" y="702" font-size="18" font-weight="700">最终核验消息令牌与业务版本</text>
+<text x="550" y="729" font-size="15">模型失败 / 超限 / 非法工具 → 失败回复</text>
+<text x="954" y="580" font-size="14">错误终止</text>
+<rect x="290" y="795" width="520" height="75" rx="10" fill="#dff2e9" stroke="#62a087"/>
+<text x="550" y="825" font-size="18" font-weight="700">草稿 + 回复 + 审计 + 任务确认，一起提交</text>
+<text x="550" y="852" font-size="15">前端读取持久化进度、回复与材料清单</text>
+<text x="550" y="906" font-size="16" fill="#8a4c38">没有退款、发券、改址、凭证审核或审批执行工具</text>
+</g></svg>

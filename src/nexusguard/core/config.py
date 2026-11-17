@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     database_max_overflow: int = Field(default=10, ge=0, le=100)
     dependency_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
 
+    reception_recent_order_days: int = Field(default=30, ge=1, le=365)
+
+    agent_max_steps: int = Field(default=5, ge=2, le=8)
+
     llm_base_url: HttpUrl | None = None
     llm_api_key: SecretStr | None = Field(default=None, repr=False)
     llm_fast_model: str = Field(default="qwen3.8-flash", min_length=1)

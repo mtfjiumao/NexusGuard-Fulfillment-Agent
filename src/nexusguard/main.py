@@ -5,10 +5,13 @@ from time import perf_counter
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from nexusguard import __version__
 from nexusguard.api.health import router as health_router
+from nexusguard.api.reception_page import WEB_DIRECTORY
+from nexusguard.api.reception_page import router as reception_page_router
 from nexusguard.api.router import router as business_router
 from nexusguard.core.config import Settings, get_settings
 from nexusguard.core.logging import configure_logging
@@ -74,4 +77,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(business_router)
+    app.include_router(reception_page_router)
+    # Backend-only development remains available before the first frontend build.
+    if WEB_DIRECTORY.is_dir():
+        app.mount(
+            "/assets/reception", StaticFiles(directory=WEB_DIRECTORY), name="reception_assets"
+        )
     return app

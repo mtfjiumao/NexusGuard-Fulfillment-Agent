@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="1080" viewBox="0 0 1120 1080" role="img" aria-labelledby="title desc">
+<title id="title">多商品破损申报信息收集</title>
+<desc id="desc">先定位本人订单，模型提取商品数量与描述，后端校验后保存草稿，逐商品接收照片。信息齐全仅进入待核验，不执行退款。</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#64748b"/></marker></defs>
+<style>text{font-family:'Noto Sans CJK SC','Microsoft YaHei',sans-serif;fill:#203047;font-size:18px}.title{font-size:29px;font-weight:700}.small{font-size:16px;fill:#526579}.box{fill:white;stroke:#a4b4c7;stroke-width:1.5}.blue{fill:#eaf3ff;stroke:#6292cb;stroke-width:1.5}.green{fill:#e9f7ef;stroke:#75b38f;stroke-width:1.5}.arrow{fill:none;stroke:#64748b;stroke-width:2;marker-end:url(#arrow)}</style>
+<rect width="1120" height="1080" fill="#f3f6fa"/>
+<text x="40" y="54" class="title">多商品破损申报 · 信息收集</text>
+<text x="40" y="88" class="small">模型提取主张，后端核验关联；图片已接收 ≠ 凭证已审核 ≠ 获准退款</text>
+<rect x="280" y="120" width="560" height="70" rx="12" class="box"/>
+<text x="560" y="162" text-anchor="middle">定位并核验本人订单；建立独立申报草稿</text>
+<path d="M560 190V220" class="arrow"/>
+<rect x="280" y="220" width="560" height="90" rx="12" class="blue"/>
+<text x="560" y="256" text-anchor="middle">用户描述多个破损商品 / 选择具体订单明细</text>
+<text x="560" y="284" text-anchor="middle" class="small">同名多规格先选择；补充文字沿用已选商品</text>
+<path d="M560 310V340" class="arrow"/>
+<rect x="280" y="340" width="560" height="80" rx="12" class="box"/>
+<text x="560" y="375" text-anchor="middle">qwen4-max 提取本轮商品、数量与原话描述</text>
+<text x="560" y="402" text-anchor="middle" class="small">不猜缺失内容，不提取附件 ID 或审核结论</text>
+<path d="M560 420V450" class="arrow"/>
+<rect x="280" y="450" width="560" height="90" rx="12" class="box"/>
+<text x="560" y="486" text-anchor="middle">后端校验原文引用、商品归属及数量上限</text>
+<text x="560" y="515" text-anchor="middle" class="small">更正总数直接覆盖；不累加，不自动截断</text>
+<path d="M280 495H130V265H280" class="arrow"/>
+<text x="40" y="373" class="small">不明确 / 数量越界</text>
+<text x="40" y="402" class="small">拒绝该项并追问</text>
+<path d="M560 540V570" class="arrow"/>
+<rect x="280" y="570" width="560" height="80" rx="12" class="blue"/>
+<text x="560" y="603" text-anchor="middle">保存各商品已填信息，逐项列出缺失内容</text>
+<text x="560" y="632" text-anchor="middle" class="small">刷新恢复；切换订单隔离草稿；可移除遗漏或误选项</text>
+<path d="M560 650V680" class="arrow"/>
+<rect x="280" y="680" width="560" height="90" rx="12" class="box"/>
+<text x="560" y="716" text-anchor="middle">按商品上传真实照片字节，保存 SHA-256 与记录</text>
+<text x="560" y="745" text-anchor="middle" class="small">JPEG/PNG · 单张 5 MiB · 草稿 10 张 / 20 MiB</text>
+<path d="M840 725H990V265H840" class="arrow"/>
+<text x="865" y="552" class="small">仍有缺项</text>
+<text x="865" y="579" class="small">继续补充</text>
+<path d="M560 770V800" class="arrow"/>
+<rect x="280" y="800" width="560" height="95" rx="12" class="green"/>
+<text x="560" y="835" text-anchor="middle">所有已申报商品的数量、描述与照片齐全</text>
+<text x="560" y="868" text-anchor="middle">ready_for_review：材料齐全，等待后续核验</text>
+<text x="40" y="955" class="small">附件仅标记 pending；模型不查看图片，本阶段没有理赔裁决、正式建单、审批或退款。</text>
+<text x="40" y="990" class="small">新增商品或移除已有信息后重新计算缺项；后台模型调用期间不持有数据库事务。</text>
+<text x="40" y="1032" class="small">维护：docs/damage-collection.md · 模型、确定性规则、任务状态与业务授权分别负责。</text>
+</svg>
