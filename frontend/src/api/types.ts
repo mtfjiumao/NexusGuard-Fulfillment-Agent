@@ -64,11 +64,22 @@ export interface OrderPage {
 }
 
 
+export interface ProductCard {
+  sku_id: UUID;
+  title: string;
+  specification: string | null;
+  price_cents: number;
+  currency: string;
+  url: string;
+  image_url: string | null;
+}
+
 export interface AssistantReply {
   reply_id: UUID;
   phase: 'clarification' | 'answer' | 'error';
   text: string;
   created_at: string;
+  product_cards: ProductCard[];
 }
 
 export interface ConversationMessage extends MessageReceipt {
@@ -80,6 +91,7 @@ export interface ConversationMessage extends MessageReceipt {
 export interface MessagePage {
   messages: ConversationMessage[];
   next_before: UUID | null;
+  application_notices: DamageApplicationNotice[];
 }
 
 
@@ -105,4 +117,65 @@ export interface DamageDraft {
   }[];
   missing: string[];
   prompt: string;
+  review: DamageReview | null;
+  can_submit: boolean;
+}
+
+export type ReviewDecision = 'passed' | 'needs_supplement' | 'rejected';
+export type ReviewStatus = ReviewDecision | 'pending' | 'withdrawn';
+export type ApplicationStatus = 'pending' | 'awaiting_resolution' | 'resolved' | 'withdrawn' | 'legacy';
+export type ApplicationOutcome = 'approved' | 'needs_supplement' | 'rejected';
+
+export interface DamageApplicationDecision {
+  outcome: ApplicationOutcome;
+  resolution: string;
+  reason: string;
+  refund_cents: number | null;
+}
+
+export interface DamageApplicationResult extends DamageApplicationDecision {
+  refund_currency: string | null;
+  resolved_at: string;
+  refund_status: string | null;
+  refund_status_text: string | null;
+}
+
+export interface DamageApplicationNotice {
+  review_id: UUID;
+  created_at: string;
+  text: string;
+}
+
+export interface DamageReviewSummary {
+  review_id: UUID;
+  revision: number;
+  order_number: string;
+  status: ReviewStatus;
+  created_at: string;
+  requested_resolution: string | null;
+  locked_for_processing: boolean;
+  result: DamageApplicationResult | null;
+}
+
+export interface DamageReviewItem {
+  item_id: UUID;
+  title: string;
+  purchased_quantity: number;
+  damaged_quantity: number;
+  description: string;
+  photos: { attachment_id: UUID; media_type: string }[];
+  decision: ReviewDecision | null;
+  reason: string | null;
+  reviewed_at: string | null;
+}
+
+export interface DamageReview extends DamageReviewSummary {
+  items: DamageReviewItem[];
+}
+
+export interface StaffDamageReview extends DamageReviewSummary {
+  items: (DamageReviewItem & { reviewer_id: string | null })[];
+  resolver_id: string | null;
+  order_paid_cents: number;
+  order_currency: string;
 }

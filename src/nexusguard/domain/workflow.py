@@ -1,4 +1,4 @@
-"""Domain transition contract; database CAS and recovery workers come later."""
+"""Allowed transitions for persisted after-sales workflows."""
 
 from enum import StrEnum
 from types import MappingProxyType

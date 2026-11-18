@@ -4,12 +4,13 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from nexusguard.infrastructure.models import SKU, AuditLog, OrderItem
 from nexusguard.infrastructure.models.damage import DamageAttachment, DamageDraft, DamageDraftItem
 from nexusguard.infrastructure.models.reception import ReceptionSession
 from nexusguard.modules.aftersales.damage_extraction import DamageExtraction
+from nexusguard.modules.aftersales.damage_review import DamageReviews
 from nexusguard.modules.aftersales.damage_schemas import (
     DamageAttachmentView,
     DamageDraftView,
@@ -20,6 +21,7 @@ from nexusguard.modules.supervisor.repository import ReceptionRepository
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 MAX_DRAFT_BYTES = 20 * 1024 * 1024
+MAX_RETAINED_BYTES = 100 * 1024 * 1024
 MAX_ATTACHMENTS = 10
 MAX_ORDER_ITEMS = 200
 
@@ -176,6 +178,7 @@ class DamageCollection:
         extraction: DamageExtraction,
     ) -> tuple[str, dict]:
         draft = await self.ensure(session, order_id)
+        await DamageReviews(self.db, self.tenant_id).ensure_editable(draft.id)
         context = await self.snapshot(session.id, order_id)
         products = {UUID(p["item_id"]): p for p in context["products"]}
         issues = []
@@ -247,6 +250,7 @@ class DamageCollection:
                 .where(
                     DamageAttachment.tenant_id == self.tenant_id,
                     DamageAttachment.draft_id == draft.id,
+                    DamageAttachment.removed_at.is_(None),
                 )
                 .order_by(DamageAttachment.created_at)
             )
@@ -286,11 +290,8 @@ class DamageCollection:
                 prompt += "其余缺项可查看下方商品清单。"
             prompt += "可分多次补充，照片请使用对应商品的上传按钮。"
         else:
-            prompt = (
-                "当前列出的破损商品、数量、描述和照片已收集齐全，等待后续核验理赔条件。"
-                "照片尚未审核，也未创建正式理赔单或执行退款；如有遗漏，仍可补充商品。"
-            )
-        return DamageDraftView(
+            prompt = "材料已收齐。请核对商品和材料，填写售后诉求后确认提交。"
+        view = DamageDraftView(
             draft_id=draft.id,
             order_id=draft.order_id,
             status=status,
@@ -308,6 +309,8 @@ class DamageCollection:
             missing=missing,
             prompt=prompt,
         )
+        await DamageReviews(self.db, self.tenant_id).fill_customer_view(view)
+        return view
 
     async def refresh(self, draft: DamageDraft) -> DamageDraftView:
         await self.db.flush()
@@ -353,6 +356,7 @@ class DamageCollection:
         draft = await self.draft(session.id, session.bound_order_id)
         if draft is None or draft.id != draft_id:
             raise HTTPException(404, "damage_draft_not_found")
+        await DamageReviews(self.db, self.tenant_id).ensure_editable(draft.id)
         if action == "discard_pending":
             remaining = [p for p in draft.pending_claims if p["id"] != str(pending_claim_id)]
             if len(remaining) == len(draft.pending_claims):
@@ -435,20 +439,26 @@ class DamageCollection:
             return
         if session.version != expected_version:
             raise HTTPException(409, "reception_version_conflict")
-        duplicate = await self.db.scalar(
-            select(DamageAttachment.id).where(
-                DamageAttachment.tenant_id == self.tenant_id,
-                DamageAttachment.draft_item_id == claim.id,
-                DamageAttachment.content_hash == digest,
+        await DamageReviews(self.db, self.tenant_id).ensure_editable(draft.id)
+        duplicate = (
+            await self.db.execute(
+                select(DamageAttachment.id, DamageAttachment.removed_at).where(
+                    DamageAttachment.tenant_id == self.tenant_id,
+                    DamageAttachment.draft_item_id == claim.id,
+                    DamageAttachment.content_hash == digest,
+                )
             )
-        )
-        if duplicate:
+        ).one_or_none()
+        if duplicate is not None and duplicate.removed_at is None:
             return
-        count, total = (
+        active = DamageAttachment.removed_at.is_(None)
+        size = func.octet_length(DamageAttachment.content)
+        count, total, retained = (
             await self.db.execute(
                 select(
-                    func.count(DamageAttachment.id),
-                    func.coalesce(func.sum(func.octet_length(DamageAttachment.content)), 0),
+                    func.count().filter(active),
+                    func.coalesce(func.sum(size).filter(active), 0),
+                    func.coalesce(func.sum(size), 0),
                 ).where(
                     DamageAttachment.tenant_id == self.tenant_id,
                     DamageAttachment.draft_id == draft.id,
@@ -457,18 +467,51 @@ class DamageCollection:
         ).one()
         if count >= MAX_ATTACHMENTS or total + len(content) > MAX_DRAFT_BYTES:
             raise HTTPException(413, "damage_attachment_limit")
-        self.db.add(
-            DamageAttachment(
-                tenant_id=self.tenant_id,
-                id=upload_id,
-                draft_id=draft.id,
-                draft_item_id=claim.id,
-                content=content,
-                content_hash=digest,
-                media_type=media_type,
-                verification_status="pending",
+        if duplicate is None:
+            if retained + len(content) > MAX_RETAINED_BYTES:
+                raise HTTPException(413, "damage_attachment_retention_limit")
+            self.db.add(
+                DamageAttachment(
+                    tenant_id=self.tenant_id,
+                    id=upload_id,
+                    draft_id=draft.id,
+                    draft_item_id=claim.id,
+                    content=content,
+                    content_hash=digest,
+                    media_type=media_type,
+                    verification_status="pending",
+                )
             )
-        )
+        else:
+            await self.db.execute(
+                update(DamageAttachment)
+                .where(
+                    DamageAttachment.tenant_id == self.tenant_id,
+                    DamageAttachment.id == duplicate.id,
+                )
+                .values(removed_at=None)
+            )
         await self.refresh(draft)
         session.updated_at = datetime.now(UTC)
         self.audit(session, "damage.photo_received", upload_id, draft)
+
+    async def remove_photo(
+        self, session: ReceptionSession, draft: DamageDraft, attachment_id: UUID, trace_id: UUID
+    ) -> None:
+        await DamageReviews(self.db, self.tenant_id).ensure_editable(draft.id)
+        removed = await self.db.scalar(
+            update(DamageAttachment)
+            .where(
+                DamageAttachment.tenant_id == self.tenant_id,
+                DamageAttachment.draft_id == draft.id,
+                DamageAttachment.id == attachment_id,
+                DamageAttachment.removed_at.is_(None),
+            )
+            .values(removed_at=datetime.now(UTC))
+            .returning(DamageAttachment.id)
+        )
+        if removed is None:
+            raise HTTPException(404, "damage_attachment_not_found")
+        await self.refresh(draft)
+        session.updated_at = datetime.now(UTC)
+        self.audit(session, "damage.photo_removed", trace_id, draft)

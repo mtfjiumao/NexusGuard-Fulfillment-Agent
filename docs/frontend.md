@@ -113,4 +113,20 @@ Dockerfile 已分为 Node 构建和 Python 运行两阶段，运行镜像不需�
 原话描述和真实附件数量；选择/移除按钮是确定性操作，不调用模型。选择某商品后，可以直接用聊天补充。
 照片以原始文件字节上传，服务端校验会话、草稿项和版本，再保存字节与哈希。
 上传结果未确认时复用同一 UUID 重试，暂停其他写操作；文件仅保留在当前页面内存，刷新前应先确认。
-“照片收到”和“材料已齐全”均不表示凭证审核或退款通过。具体规则见 [破损申报](damage-collection.md)。
+材料齐全后，顾客可填写诉求并确认提交售后申请。审核员通过 `/damage-review` 核验材料并保存整份申请的处理结论，顾客在聊天记录中收到结果。演示审核员通过独立入口访问。详见 [破损售后申请](damage-review.md)。
+
+## 本机模拟顾客
+
+在本机 PostgreSQL 创建独立的 `nexusguard_demo` 数据库，并让开发配置中的数据库角色拥有该库。然后在项目根目录执行：
+
+```bash
+source .venv/bin/activate
+python -m nexusguard.tools.demo_customer setup
+python -m nexusguard.tools.demo_customer serve
+```
+
+打开 <http://127.0.0.1:8001/customer-service>。页面以固定模拟顾客身份显示示例订单 `DEMO-1001`。API 和 Agent Worker 一起启动，对话使用本地模型配置。审核工作台仍由宿主提供员工身份。
+
+发送「我想买一点香蕉」，可查看在售商品卡片。点击卡片会在新标签打开本地商品详情。已运行过演示的环境可重新执行 `setup` 补齐示例香蕉 SKU。
+
+演示香蕉照片缩放自 Evan-Amos 的 [Banana-Single.jpg](https://commons.wikimedia.org/wiki/File:Banana-Single.jpg)，按 [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) 使用。

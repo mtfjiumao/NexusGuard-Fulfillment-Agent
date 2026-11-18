@@ -11,7 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from nexusguard.api.customer import CustomerIdentity, get_customer_identity
 from nexusguard.infrastructure.database import get_session
 from nexusguard.modules.aftersales.damage_collection import MAX_IMAGE_BYTES
-from nexusguard.modules.aftersales.damage_schemas import DamageItemAction
+from nexusguard.modules.aftersales.damage_schemas import (
+    DamageItemAction,
+    DamageReviewCommand,
+    DamageReviewSubmit,
+)
 from nexusguard.modules.supervisor.reception_service import ReceptionService
 from nexusguard.modules.supervisor.schemas import (
     ActionRequest,
@@ -141,3 +145,47 @@ async def damage_photo_upload(
         )
     except IntegrityError as error:
         raise HTTPException(409, "damage_upload_conflict") from error
+
+
+@router.post("/sessions/{session_id}/damage/{draft_id}/reviews", response_model=ReceptionView)
+async def submit_damage_review(
+    session_id: UUID, draft_id: UUID, data: DamageReviewSubmit, service: Service
+):
+    try:
+        return await service.damage_review(
+            session_id, draft_id, data.expected_version, submission=data
+        )
+    except IntegrityError as error:
+        raise HTTPException(409, "damage_review_submission_conflict") from error
+
+
+@router.post(
+    "/sessions/{session_id}/damage/{draft_id}/reviews/{review_id}/withdraw",
+    response_model=ReceptionView,
+)
+async def withdraw_damage_review(
+    session_id: UUID,
+    draft_id: UUID,
+    review_id: UUID,
+    data: DamageReviewCommand,
+    service: Service,
+):
+    return await service.damage_review(
+        session_id, draft_id, data.expected_version, withdraw_id=review_id
+    )
+
+
+@router.delete(
+    "/sessions/{session_id}/damage/{draft_id}/photos/{attachment_id}",
+    response_model=ReceptionView,
+)
+async def remove_damage_photo(
+    session_id: UUID,
+    draft_id: UUID,
+    attachment_id: UUID,
+    expected_version: Annotated[int, Query(ge=1)],
+    service: Service,
+):
+    return await service.damage_review(
+        session_id, draft_id, expected_version, remove_photo_id=attachment_id
+    )

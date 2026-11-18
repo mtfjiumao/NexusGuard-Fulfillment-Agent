@@ -16,7 +16,7 @@ from nexusguard.core.config import Settings, get_settings
 from nexusguard.core.logging import configure_logging
 from nexusguard.infrastructure.database import build_engine
 from nexusguard.infrastructure.llm import LLMError, ModelGateway
-from nexusguard.infrastructure.models import AuditLog, InboxEvent, Order, OutboxEvent
+from nexusguard.infrastructure.models import AuditLog, DamageReview, InboxEvent, Order, OutboxEvent
 from nexusguard.infrastructure.models.reception import (
     ReceptionMessage,
     ReceptionReply,
@@ -24,9 +24,17 @@ from nexusguard.infrastructure.models.reception import (
 )
 from nexusguard.modules.aftersales.damage_collection import DamageCollection
 from nexusguard.modules.aftersales.damage_extraction import DamageExtraction, validate_damage
+from nexusguard.modules.aftersales.damage_review import (
+    APPLICATION_RESOLVED,
+    DamageReviews,
+    application_notice,
+)
+from nexusguard.modules.payments.refunds import RefundWorker, SimulationOutcome
+from nexusguard.modules.presales.catalog import search_products
 from nexusguard.modules.supervisor.conversation_agent import (
     AgentAnswer,
     CaseAction,
+    CatalogAction,
     CollectAction,
     SKUAction,
     ToolAction,
@@ -72,10 +80,13 @@ class AgentWorker:
         factory: async_sessionmaker[AsyncSession],
         gateway: ModelGateway | None,
         settings: Settings,
+        *,
+        refund_simulation: SimulationOutcome | None = None,
     ):
         self.factory = factory
         self.gateway = gateway
         self.settings = settings
+        self.refund_simulation = refund_simulation
 
     @staticmethod
     def acknowledge(db: AsyncSession, event: OutboxEvent) -> None:
@@ -218,6 +229,23 @@ class AgentWorker:
             session_version = session.version
             order_id = order.id if order else None
             order_version = order.version if order else None
+            damage_review = None
+            review_topics = {
+                "damage",
+                "case_progress",
+                "case_materials",
+                "refund",
+                "return",
+                "exchange",
+            }
+            if order_id and review_topics.intersection(intent.intents):
+                draft = await DamageCollection(repo).draft(session.id, order_id)
+                if draft:
+                    damage_review = await DamageReviews(db, job.tenant_id).agent_summary(draft.id)
+            damage_locked = bool(damage_review and damage_review["locked_for_processing"])
+            approved = bool(
+                damage_review and (damage_review["result"] or {}).get("outcome") == "approved"
+            )
             history_rows = list(
                 (
                     await db.scalars(
@@ -258,6 +286,7 @@ class AgentWorker:
                 "intents": intent.intents,
                 "order": order_facts(order) if order else None,
                 "sku_available": session.sku_id is not None,
+                "damage_review": damage_review,
                 "untrusted_history": [
                     {
                         "user": row.text[:1200],
@@ -294,6 +323,19 @@ class AgentWorker:
                 ):
                     raise LLMError("agent_context_changed")
                 tools = ReadOnlyTools(repo)
+                if isinstance(command, CatalogAction):
+                    keyword = (command.keyword or "").strip()
+                    if not keyword or keyword.casefold() not in job.text.casefold():
+                        return {"guidance": "你想看看哪种商品？", "products": []}
+                    products = await search_products(db, job.tenant_id, keyword)
+                    if products:
+                        guidance = "店里有匹配的商品，点开可以看详情。"
+                    else:
+                        guidance = f"暂时没找到与「{keyword}」匹配的在售商品。要看看其他商品吗？"
+                    return {
+                        "guidance": guidance,
+                        "products": [product.model_dump(mode="json") for product in products],
+                    }
                 if isinstance(command, SKUAction):
                     guidance, facts = await tools.presales(command.topic, session.sku_id)
                     return {"guidance": guidance, "facts": facts}
@@ -309,9 +351,23 @@ class AgentWorker:
                     return {"guidance": guidance, "facts": facts}
                 if isinstance(command, CaseAction):
                     guidance, facts = await tools.aftersales(command.topic, current_order)
+                    if damage_review and command.topic in review_topics:
+                        facts["damage_review"] = damage_review
+                        guidance = "根据破损售后申请记录说明进度或转述已保存的人工结论。"
+                    elif command.topic in {"refund", "return", "exchange"}:
+                        guidance += "如果商品破损，请引导顾客说明破损并从面板提交售后申请。"
                     return {"guidance": guidance, "facts": facts}
                 collection = DamageCollection(repo)
                 if isinstance(command, CollectAction):
+                    if damage_locked or approved:
+                        return {
+                            "error": "damage_review_pending",
+                            "guidance": (
+                                "该申请已由人工同意，请查看处理说明。"
+                                if approved
+                                else "申请正在人工处理，需要修改时请先在面板撤回。"
+                            ),
+                        }
                     patch = validate_damage(command.extraction, job.text)
                     guidance, _ = await collection.apply(
                         session, current_order.id, message.id, patch
@@ -331,6 +387,7 @@ class AgentWorker:
                 snapshot["collected"] = snapshot["collected"][:20]
                 view = await collection.current_view_for_order(session.id, current_order.id)
                 snapshot["draft_status"] = view.status if view else None
+                snapshot["damage_review"] = damage_review
                 snapshot["missing"] = view.missing[:12] if view else ["选择破损商品并补充信息"]
                 snapshot["photo_counts"] = (
                     [
@@ -353,7 +410,12 @@ class AgentWorker:
                     if view
                     else []
                 )
-                snapshot["guidance"] = "照片仅接收未审核；待关联信息需通过面板选择商品。"
+                if approved:
+                    snapshot["guidance"] = "该申请已由人工同意，请查看处理说明。"
+                elif damage_locked:
+                    snapshot["guidance"] = "申请正在人工处理，需要修改时请先在面板撤回。"
+                else:
+                    snapshot["guidance"] = "请核对材料，齐全后由顾客填写诉求并确认提交。"
                 return snapshot
 
         try:
@@ -362,7 +424,7 @@ class AgentWorker:
                 context,
                 execute,
                 max_steps=self.settings.agent_max_steps,
-                require_damage="damage" in intent.intents,
+                require_damage="damage" in intent.intents and not (damage_locked or approved),
             )
         except HTTPException:
             raise LLMError("agent_tool_unavailable") from None
@@ -541,6 +603,11 @@ class AgentWorker:
             raise LLMError("agent_context_changed")
         await self.resolve(repo, session, message, intent, mutate=True)
         calls = list(turn.answer.calls)
+        products = {}
+        for call in calls:
+            if call["tool"] == "search_products":
+                for product in call["result"]["products"]:
+                    products.setdefault(product["sku_id"], product)
         if turn.damage is not None:
             _, fact = await DamageCollection(repo).apply(session, order.id, message.id, turn.damage)
             calls.append(fact)
@@ -550,15 +617,49 @@ class AgentWorker:
             "completed",
             {
                 "calls": calls,
+                "product_cards": list(products.values())[:3],
                 "agent_model": turn.answer.model,
                 "agent_steps": turn.answer.steps,
             },
         )
 
+    async def notify_damage_application(self) -> bool:
+        async with self.factory() as db, db.begin():
+            event = await db.scalar(
+                select(OutboxEvent)
+                .where(
+                    OutboxEvent.event_type.in_((APPLICATION_RESOLVED, "damage.review_completed")),
+                    OutboxEvent.aggregate_type == "damage_review",
+                    OutboxEvent.published_at.is_(None),
+                    OutboxEvent.available_at <= datetime.now(UTC),
+                )
+                .order_by(OutboxEvent.available_at, OutboxEvent.id)
+                .with_for_update(skip_locked=True)
+                .limit(1)
+            )
+            if event is None:
+                return False
+            review = await db.get(DamageReview, (event.tenant_id, event.aggregate_id))
+            if (
+                event.event_type == APPLICATION_RESOLVED
+                and review
+                and review.outcome is not None
+                and review.notified_at is None
+            ):
+                review.notice = application_notice(review)
+                review.notified_at = datetime.now(UTC)
+            self.acknowledge(db, event)
+            return True
+
     async def run_once(self) -> bool:
+        notified = await self.notify_damage_application()
+        refund_advanced = False
+        if self.refund_simulation is not None:
+            async with self.factory() as db, db.begin():
+                refund_advanced = await RefundWorker(db, self.refund_simulation).run_once()
         job = await self.claim()
         if job is None:
-            return False
+            return notified or refund_advanced
         try:
             intent, model = await self.understand(job)
             turn = await self.prepare_agent(job, intent)

@@ -1,5 +1,6 @@
 import { computed, onScopeDispose, ref } from 'vue';
 import { ApiError, receptionApi } from '../api/reception';
+import type { DamageApplicationNotice } from '../api/types';
 import type {
   ActionRequest, ConversationMessage, CreateReception, MessageRequest, MessageStatus, OrderCard, ReceptionAction,
   ReceptionView, UUID,
@@ -30,6 +31,8 @@ export function useReception() {
   let disposed = false;
   let failedOffset = 0;
   let initialized = false;
+  let submission: { draftId: UUID; id: UUID; request: string } | undefined;
+  const applicationNotices = ref<DamageApplicationNotice[]>([]);
 
   const selecting = computed(() => ['selecting', 'clarifying'].includes(view.value?.state ?? ''));
   const activeOrder = computed(() => view.value?.bound_order ?? view.value?.candidate_order ?? null);
@@ -62,9 +65,11 @@ export function useReception() {
     view.value = null;
     orders.value = [];
     messages.value = [];
+    applicationNotices.value = [];
     nextOffset.value = null;
     pending.value = null;
     pendingPhoto.value = null;
+    submission = undefined;
     nextBefore.value = null;
     syncFailed.value = false;
   }
@@ -86,6 +91,9 @@ export function useReception() {
   }
 
   async function applyView(data: ReceptionView) {
+    if (submission && data.damage_draft?.review?.review_id === submission.id) {
+      submission = undefined;
+    }
     view.value = data;
     orders.value = [];
     nextOffset.value = null;
@@ -106,6 +114,7 @@ export function useReception() {
     if (disposed) return;
     const hadMessages = messages.value.length > 0;
     mergeMessages(page.messages);
+    applicationNotices.value = page.application_notices;
     if (!hadMessages) nextBefore.value = page.next_before;
   }
 
@@ -123,6 +132,7 @@ export function useReception() {
       else view.value = data;
       if (messages.value.length === 0) nextBefore.value = page.next_before;
       mergeMessages(page.messages);
+      applicationNotices.value = page.application_notices;
       syncFailed.value = false;
       if (recovered) announce('咨询记录已同步，可以继续操作。');
     } catch (error) {
@@ -328,6 +338,56 @@ export function useReception() {
     announce('照片已收到，尚未审核；已更新下方的材料清单。');
   }
 
+  async function submitDamageReview(request: string) {
+    const session = view.value;
+    const damage = session?.damage_draft;
+    if (disabled.value || !session || !damage?.can_submit || !request) return;
+    if (!window.crypto?.randomUUID) {
+      announce('请使用 HTTPS 或本机 localhost 地址提交材料。', true);
+      return;
+    }
+    if (submission?.draftId !== damage.draft_id || submission.request !== request) {
+      submission = { draftId: damage.draft_id, id: crypto.randomUUID(), request };
+    }
+    const submissionId = submission.id;
+    await perform(async () => {
+      const data = await receptionApi.submitReview(
+        session.session_id, damage.draft_id, submissionId, session.version, request,
+      );
+      submission = undefined;
+      await applyView(data);
+      announce('售后申请已收到，正在等待人工处理。');
+    });
+  }
+
+  async function withdrawDamageReview() {
+    const session = view.value;
+    const damage = session?.damage_draft;
+    if (disabled.value || !session || !damage?.review?.locked_for_processing) return;
+    const reviewId = damage.review.review_id;
+    await perform(async () => {
+      const data = await receptionApi.withdrawReview(
+        session.session_id, damage.draft_id, reviewId, session.version,
+      );
+      submission = undefined;
+      await applyView(data);
+      announce('已撤回本次提交，可以继续修改材料。');
+    });
+  }
+
+  async function removeDamagePhoto(photoId: UUID) {
+    const session = view.value;
+    const damage = session?.damage_draft;
+    if (disabled.value || !session || !damage || damage.review?.locked_for_processing) return;
+    await perform(async () => {
+      const data = await receptionApi.removePhoto(
+        session.session_id, damage.draft_id, photoId, session.version,
+      );
+      await applyView(data);
+      announce('已从当前草稿移除该照片。');
+    });
+  }
+
   async function uploadDamagePhoto(payload: { claimId: UUID; file: File }) {
     if (disabled.value || !view.value?.damage_draft) return;
     if (!['image/jpeg', 'image/png'].includes(payload.file.type)
@@ -365,9 +425,11 @@ export function useReception() {
 
   return {
     view, busy, notice, hasError, draft, orders, nextOffset, ordersFailed, messages,
+    applicationNotices,
     pending, selecting, activeOrder, disabled, deliveryStatus, nextBefore, syncFailed,
     messageStatus, olderMessages, synchronize, pendingPhoto,
     editDamageItem, uploadDamagePhoto, retryPhoto,
+    submitDamageReview, withdrawDamageReview, removeDamagePhoto,
     initialize, act, send, retryPending, moreOrders, retryOrders,
   };
 }

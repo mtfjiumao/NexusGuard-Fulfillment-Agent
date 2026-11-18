@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="690" viewBox="0 0 960 690" role="img" aria-labelledby="title description">
+  <title id="title">破损售后申请</title>
+  <desc id="description">顾客确认提交售后诉求和材料。审核员逐项核验，再保存整份申请的处理结论。客服会话通知顾客。需要补充或未同意时，顾客可修改材料并重新提交。</desc>
+  <defs><marker id="arrow" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto"><path d="M0 0L9 4.5L0 9Z" fill="#45606b"/></marker></defs>
+  <rect width="960" height="690" fill="#f6f8fa"/>
+  <g fill="none" stroke="#45606b" stroke-width="2" marker-end="url(#arrow)">
+    <path d="M480 121V160"/><path d="M480 228V267"/><path d="M480 335V374"/>
+    <path d="M480 442V481"/><path d="M480 549V587"/>
+    <path d="M265 301H135V621H260"/>
+    <path d="M260 632H38V94H260"/>
+  </g>
+  <g fill="#fff" stroke="#9db0b8">
+    <rect x="265" y="65" width="430" height="56" rx="8"/>
+    <rect x="265" y="160" width="430" height="68" rx="8"/>
+    <rect x="265" y="267" width="430" height="68" rx="8"/>
+    <rect x="265" y="374" width="430" height="68" rx="8"/>
+    <rect x="265" y="481" width="430" height="68" rx="8" fill="#e5f4ec"/>
+    <rect x="265" y="587" width="430" height="68" rx="8"/>
+  </g>
+  <g font-family="sans-serif" text-anchor="middle" fill="#18303a" font-size="16">
+    <text x="480" y="40" font-size="24" font-weight="700">破损售后申请</text>
+    <text x="480" y="100">材料齐全 · 顾客填写售后诉求</text>
+    <text x="480" y="187" font-weight="700">确认提交售后申请</text>
+    <text x="480" y="211">保存诉求、数量、描述和照片</text>
+    <text x="480" y="294" font-weight="700">审核员逐商品核验材料</text>
+    <text x="480" y="318">每项记录意见、审核人和时间</text>
+    <text x="480" y="401" font-weight="700">审核员保存整份申请的处理结论</text>
+    <text x="480" y="425">同意 · 需补充 · 未同意</text>
+    <text x="480" y="508" font-weight="700">客服会话通知顾客</text>
+    <text x="480" y="532">转达人工决定、原因和处理说明</text>
+    <text x="480" y="614" font-weight="700">需补充或未同意时，可修改材料</text>
+    <text x="480" y="638">确认后提交新版本</text>
+    <text x="178" y="288" font-size="14">处理前可撤回</text>
+  </g>
+</svg>

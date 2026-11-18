@@ -131,4 +131,10 @@ Outbox 的 `available_at` 作任务下次可领取时间，`retry_count` 记录�
 | `damage_attachments` / DamageAttachment | 客户端 UUID、草稿项、媒体类型、SHA-256、实际图片 `BYTEA`、接收时间、`verification_status=pending`；同商品同内容去重 |
 
 明细与草稿订单使用复合外键关联，数量不能大于购买数量由服务验证。图片大小、格式种类、哈希格式和未审核状态有数据库约束，单草稿数量/总字节上限由服务在会话锁内验证。
+
+### 破损材料审核
+
+`0005_damage_review` 新增 `damage_reviews` 和 `damage_review_items`。前者保存草稿、订单号、版本、状态和顾客通知，同一草稿最多有一个待处理版本。后者逐项保存商品、数量、描述、照片引用、结论、原因、审核人及时间。照片移除使用 `damage_attachments.removed_at`，旧审核版本通过原照片 UUID 读取保留的文件。
+
+`0006_damage_application` 在提交版本上增加顾客诉求与人工处理结论。人工结论字段包含处理结果、原因、说明、审核员、处理时间，以及可选的退款金额和币种。通知内容由 Worker 写入该版本，`notified_at` 记录生成时间和会话中的显示顺序。
 列表不返回图片字节。详情、限制、事务与未实现部分见 [破损信息收集](damage-collection.md)。

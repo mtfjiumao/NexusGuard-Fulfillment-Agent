@@ -6,14 +6,15 @@ from sqlalchemy import select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nexusguard.api.customer import CustomerIdentity
-from nexusguard.infrastructure.models import AuditLog, Order, OutboxEvent
+from nexusguard.infrastructure.models import AuditLog, DamageReview, Order, OutboxEvent
 from nexusguard.infrastructure.models.reception import (
     ReceptionMessage,
     ReceptionReply,
     ReceptionSession,
 )
 from nexusguard.modules.aftersales.damage_collection import DamageCollection
-from nexusguard.modules.aftersales.damage_schemas import DamageItemAction
+from nexusguard.modules.aftersales.damage_review import DamageReviews
+from nexusguard.modules.aftersales.damage_schemas import DamageItemAction, DamageReviewSubmit
 from nexusguard.modules.supervisor.reception_rules import suggestions
 from nexusguard.modules.supervisor.repository import ReceptionRepository
 from nexusguard.modules.supervisor.schemas import (
@@ -297,6 +298,57 @@ class ReceptionService:
             await self.db.flush()
             return await self.view(reception)
 
+    async def damage_review(
+        self,
+        reception_id: UUID,
+        draft_id: UUID,
+        expected_version: int,
+        *,
+        submission: DamageReviewSubmit | None = None,
+        withdraw_id: UUID | None = None,
+        remove_photo_id: UUID | None = None,
+    ) -> ReceptionView:
+        async with self.db.begin():
+            await self.authorize()
+            reception = await self.load(reception_id, lock=True)
+            collection = DamageCollection(self.repo)
+            draft = await collection.draft(reception.id, reception.bound_order_id)
+            if draft is None or draft.id != draft_id:
+                raise HTTPException(404, "damage_draft_not_found")
+            reviews = DamageReviews(self.db, self.identity.tenant_id)
+            if submission is not None:
+                existing = await self.db.get(
+                    DamageReview, (self.identity.tenant_id, submission.submission_id)
+                )
+                if existing is not None:
+                    if (
+                        existing.draft_id != draft.id
+                        or existing.requested_resolution != submission.requested_resolution
+                    ):
+                        raise HTTPException(409, "damage_review_submission_id_conflict")
+                    return await self.view(reception)
+            await self.ensure_idle(reception)
+            self.check_version(reception, expected_version)
+            if submission is not None:
+                order = await self.repo.order(draft.order_id)
+                if order is None:
+                    raise HTTPException(404, "order_not_found")
+                await reviews.submit(
+                    draft,
+                    await collection.view(draft),
+                    order.order_number,
+                    submission.submission_id,
+                    submission.requested_resolution,
+                    self.trace_id,
+                )
+            elif withdraw_id is not None:
+                await reviews.withdraw(draft, withdraw_id, self.trace_id)
+            elif remove_photo_id is not None:
+                await collection.remove_photo(reception, draft, remove_photo_id, self.trace_id)
+            reception.updated_at = datetime.now(UTC)
+            await self.db.flush()
+            return await self.view(reception)
+
     async def history(self, reception_id: UUID, limit: int, before: UUID | None) -> MessagePage:
         async with self.db.begin():
             await self.authorize()
@@ -353,6 +405,7 @@ class ReceptionService:
                                 phase=reply.phase,
                                 text=reply.text,
                                 created_at=reply.created_at,
+                                product_cards=reply.facts.get("product_cards", []),
                             )
                             for reply in replies
                             if reply.message_id == row.id
@@ -361,6 +414,13 @@ class ReceptionService:
                     for row in page
                 ],
                 next_before=page[0].id if len(rows) > limit else None,
+                application_notices=(
+                    await DamageReviews(self.db, self.identity.tenant_id).notices(
+                        reception_id, self.identity.user_id
+                    )
+                    if before is None
+                    else []
+                ),
             )
 
     @staticmethod

@@ -1,19 +1,30 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { computed, onMounted } from 'vue';
 import DamageDraftPanel from '../components/DamageDraftPanel.vue';
 import MessageComposer from '../components/MessageComposer.vue';
 import OrderCard from '../components/OrderCard.vue';
 import OrderPicker from '../components/OrderPicker.vue';
+import ProductCards from '../components/ProductCards.vue';
 import SuggestedQuestions from '../components/SuggestedQuestions.vue';
 import { useReception } from '../composables/useReception';
 
 const {
   view, busy, notice, hasError, draft, orders, nextOffset, ordersFailed, messages,
+  applicationNotices,
   pending, selecting, activeOrder, disabled, deliveryStatus, nextBefore, syncFailed,
   messageStatus, olderMessages, synchronize, pendingPhoto,
   editDamageItem, uploadDamagePhoto, retryPhoto,
+  submitDamageReview, withdrawDamageReview, removeDamagePhoto,
   initialize, act, send, retryPending, moreOrders, retryOrders,
 } = useReception();
+const timeline = computed(() => [
+  ...messages.value.map(message => ({
+    key: message.message_id, time: message.created_at, message,
+  })),
+  ...applicationNotices.value.map(notice => ({
+    key: `application-${notice.review_id}`, time: notice.created_at, notice,
+  })),
+].sort((a, b) => a.time.localeCompare(b.time) || a.key.localeCompare(b.key)));
 onMounted(initialize);
 </script>
 
@@ -49,6 +60,7 @@ onMounted(initialize);
     <DamageDraftPanel v-if="view?.damage_draft" :damage="view.damage_draft" :disabled="disabled"
       @select="editDamageItem($event, 'select')" @remove="editDamageItem($event, 'remove')"
       @upload="uploadDamagePhoto"
+      @submit="submitDamageReview" @withdraw="withdrawDamageReview" @remove-photo="removeDamagePhoto"
       @resolve="editDamageItem($event.itemId, 'select', $event.pendingId)"
       @discard="editDamageItem(undefined, 'discard_pending', $event)" />
     <div v-if="pendingPhoto && !busy" class="context" role="status">
@@ -59,12 +71,18 @@ onMounted(initialize);
     <section aria-label="咨询记录">
       <button v-if="nextBefore" type="button" :disabled="busy" @click="olderMessages">加载更早消息</button>
       <ol class="messages" aria-live="polite">
-        <li v-for="message in messages" :key="message.message_id" class="turn">
-          <div class="user-message"><span class="message-author">你</span>{{ message.text }}</div>
-          <div v-for="reply in message.replies" :key="reply.reply_id" class="assistant-message">
-            <span class="message-author">客服</span>{{ reply.text }}
+        <li v-for="entry in timeline" :key="entry.key" class="turn">
+          <template v-if="'message' in entry">
+            <div class="user-message"><span class="message-author">你</span>{{ entry.message.text }}</div>
+            <template v-for="reply in entry.message.replies" :key="reply.reply_id">
+              <div class="assistant-message"><span class="message-author">客服</span>{{ reply.text }}</div>
+              <ProductCards :products="reply.product_cards" />
+            </template>
+            <p class="message-status">{{ messageStatus(entry.message.status) }}</p>
+          </template>
+          <div v-else class="assistant-message">
+            <span class="message-author">客服 · 人工处理结果</span>{{ entry.notice.text }}
           </div>
-          <p class="message-status">{{ messageStatus(message.status) }}</p>
         </li>
       </ol>
     </section>

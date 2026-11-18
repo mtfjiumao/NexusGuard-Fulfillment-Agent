@@ -139,8 +139,6 @@ class ReadOnlyTools:
                 "请说明需要咨询的商品。当前尚无可查询的发货时效规则，暂时不能承诺具体发货时间。",
                 facts,
             )
-        if intent == "recommendation":
-            return "请告诉我你想买的商品类型、用途、规格和预算，我再帮你明确选择条件。", facts
         if sku is None:
             return "请先提供商品名称或从商品页进入，以便查询对应规格和库存。", facts
         facts.update({"title": sku.title, "sku_code": sku.sku_code})

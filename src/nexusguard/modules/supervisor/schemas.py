@@ -5,7 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from nexusguard.modules.aftersales.damage_schemas import DamageDraftView
+from nexusguard.modules.aftersales.damage_schemas import DamageApplicationNotice, DamageDraftView
+from nexusguard.modules.presales.catalog import ProductCard
 
 
 class ReceptionState(StrEnum):
@@ -120,6 +121,7 @@ class ReplyView(BaseModel):
     phase: Literal["clarification", "answer", "error"]
     text: str
     created_at: datetime
+    product_cards: list[ProductCard] = Field(default_factory=list, max_length=3)
 
 
 class MessageView(MessageReceipt):
@@ -131,3 +133,4 @@ class MessageView(MessageReceipt):
 class MessagePage(BaseModel):
     messages: list[MessageView]
     next_before: UUID | None
+    application_notices: list[DamageApplicationNotice] = Field(default_factory=list)

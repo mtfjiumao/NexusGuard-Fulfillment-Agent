@@ -54,7 +54,7 @@ curl http://127.0.0.1:8000/health/ready
 - `/health/ready` 并行检查 PostgreSQL 与 Redis；任一不可用或超时返回 503。
 - 每个响应携带 `X-Request-ID`，请求摘要日志使用 JSON，默认不记录请求正文或查询参数。
 - `production` 环境隐藏 OpenAPI 与交互文档。
-- 已提供客服接待 API；需宿主认证中间件注入可信用户身份，未接认证时返回 401。其余业务 Router 仍是预留入口。
+- 客服接待和商品详情 API 使用宿主注入的顾客身份，员工审核接口使用独立权限。
 
 也可以容器启动整个开发环境：
 
@@ -89,14 +89,14 @@ npm run dev
 Dockerfile 会自动完成前端构建；纯 API 开发不要求预先构建前端。
 
 会话、消息及回复保存到 PostgreSQL；Outbox 消费者执行意图识别与受控查询。先执行
-`alembic upgrade head` 应用到 `0004_damage`，再另开终端启动后台进程：
+`alembic upgrade head` 应用到 `0007_damage_refund`，再另开终端启动后台进程：
 
 ```bash
 python -m nexusguard.modules.supervisor.agent_worker
 ```
 
 页面显示排队、处理、待选订单和回复，并可恢复 `session_id` 对应的历史记录。
-已支持 [多商品破损申报信息收集](docs/damage-collection.md)：逐项记录数量和描述，真实上传照片，齐全后进入待核验状态。
+顾客填写诉求并提交破损售后申请后，审核员在 `/damage-review` 逐项核验材料、保存整份申请结论。客服会话在人工处理完成后显示结果。审核页面使用宿主注入的员工身份。详见 [破损售后申请](docs/damage-review.md)。
 尚未实现登录，未登录时页面提示先登录。
 调用前由认证适配设置 `request.state.customer_identity`，不要用浏览器自报的用户 ID 替代认证。
 
@@ -158,6 +158,6 @@ alembic check
 
 ## 下一步
 
-核心数据库、接待选单、多模型客服工具循环和破损信息收集已落地。下一步讨论凭证与事实核验、确定性规则引擎，再实现持久化审批挂起/恢复。退款模式、退货入库条件、退货率统计口径、生鲜特批规则仍需确定。
+破损售后流程覆盖提交、人工处理、退款风控、主管审批和本地模拟退款。接入真实支付渠道需要实现支付适配器。详见 [模拟退款演示](docs/damage-review.md#模拟退款)。
 
 已提供意图识别、查询和破损信息收集 Agent；支付、身份认证、政策裁决或审批执行仍未接入，不具备生产资金处理能力。详见 [客服 Agent 实现](docs/customer-agent.md)。

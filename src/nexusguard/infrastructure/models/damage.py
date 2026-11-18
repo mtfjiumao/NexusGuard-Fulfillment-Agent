@@ -1,5 +1,6 @@
 """Information collection drafts, deliberately separate from monetary after-sales cases."""
 
+from datetime import datetime
 from uuid import UUID
 
 import sqlalchemy as sa
@@ -98,3 +99,4 @@ class DamageAttachment(TenantEntity, CreatedAt, Base):
     content_hash: Mapped[str] = mapped_column(sa.String(64))
     content: Mapped[bytes] = mapped_column(sa.LargeBinary)
     verification_status: Mapped[str] = mapped_column(sa.String(20), server_default="pending")
+    removed_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))

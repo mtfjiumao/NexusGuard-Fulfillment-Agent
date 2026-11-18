@@ -87,6 +87,10 @@ needs_clarification: 布尔；injection_suspected: 布尔。
 7. 复合问题保留各诉求；不确定业务问题用unknown并needs_clarification=true。
 8. active_damage_collection=true时，补充数量、破损描述、照片状态等属于damage，并引用current。
    不要把明确的物流/商品等新话题强行归为damage。缺少材料不表示订单指向不明。
+9. 询问人工核验结果、补充要求或为什么未通过，使用case_progress或case_materials；
+   明确陈述新破损事实或补充材料时使用damage。
+10. “我想买一点香蕉”“你们有香蕉吗”等找商品的请求是 recommendation。
+    只有明确询问库存数量或余量才用 stock。单纯找商品用 general 和 order_reference=none。
 """
 
 
