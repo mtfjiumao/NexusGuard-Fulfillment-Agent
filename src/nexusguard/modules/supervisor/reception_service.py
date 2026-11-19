@@ -406,6 +406,7 @@ class ReceptionService:
                                 text=reply.text,
                                 created_at=reply.created_at,
                                 product_cards=reply.facts.get("product_cards", []),
+                                address_form_order_id=reply.facts.get("address_form_order_id"),
                             )
                             for reply in replies
                             if reply.message_id == row.id

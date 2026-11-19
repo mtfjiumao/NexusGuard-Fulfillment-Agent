@@ -29,6 +29,7 @@ from nexusguard.modules.aftersales.damage_review import (
     DamageReviews,
     application_notice,
 )
+from nexusguard.modules.logistics.address import ADDRESS_BLOCKED_TEXT, address_change_blocker
 from nexusguard.modules.payments.refunds import RefundWorker, SimulationOutcome
 from nexusguard.modules.presales.catalog import search_products
 from nexusguard.modules.supervisor.conversation_agent import (
@@ -285,6 +286,11 @@ class AgentWorker:
                 "untrusted_customer_text": job.text,
                 "intents": intent.intents,
                 "order": order_facts(order) if order else None,
+                "address_change_blocker": (
+                    address_change_blocker(order)
+                    if order is not None and "address_change" in intent.intents
+                    else None
+                ),
                 "sku_available": session.sku_id is not None,
                 "damage_review": damage_review,
                 "untrusted_history": [
@@ -594,6 +600,25 @@ class AgentWorker:
         if order is not None:
             # Serialize final fact-version validation against concurrent order updates.
             await repo.db.refresh(order, with_for_update=True)
+        address_text = ""
+        address_form_order_id = None
+        if order is not None and "address_change" in intent.intents:
+            blocker = address_change_blocker(order)
+            if blocker is not None:
+                address_text = ADDRESS_BLOCKED_TEXT[blocker]
+            else:
+                address_form_order_id = str(order.id)
+                address_text = "请在表单里填写并确认新的收货地址。"
+            if intent.intents == ["address_change"]:
+                await self.resolve(repo, session, message, intent, mutate=True)
+                return (
+                    address_text,
+                    "answer",
+                    "completed",
+                    {
+                        "address_form_order_id": address_form_order_id,
+                    },
+                )
         if (
             turn is None
             or session.version != turn.session_version
@@ -612,12 +637,13 @@ class AgentWorker:
             _, fact = await DamageCollection(repo).apply(session, order.id, message.id, turn.damage)
             calls.append(fact)
         return (
-            turn.answer.text,
+            "\n\n".join(filter(None, (turn.answer.text, address_text))),
             "answer",
             "completed",
             {
                 "calls": calls,
                 "product_cards": list(products.values())[:3],
+                "address_form_order_id": address_form_order_id,
                 "agent_model": turn.answer.model,
                 "agent_steps": turn.answer.steps,
             },
@@ -662,7 +688,11 @@ class AgentWorker:
             return notified or refund_advanced
         try:
             intent, model = await self.understand(job)
-            turn = await self.prepare_agent(job, intent)
+            turn = (
+                None
+                if intent.intents == ["address_change"]
+                else await self.prepare_agent(job, intent)
+            )
         except LLMError as error:
             await self.finish(job, None, None, error.code)
         else:

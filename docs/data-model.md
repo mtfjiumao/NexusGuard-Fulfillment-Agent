@@ -25,7 +25,7 @@
 | `shipments` / Shipment | `order_id: UUID`, `carrier`, `tracking_no`, `status`, `promised_delivery_at/shipped_at/delivered_at` | 支持一个订单多个包裹 |
 | `logistics_events` / LogisticsEvent | `shipment_id: UUID`, `source`, `source_event_id`, `event_type`, `occurred_at/received_at`, `payload: JSONB` | 按租户、来源和事件号去重；轨迹时间与接收时间分开 |
 
-支付状态只记录支付生命周期；退款金额与预占余额在退款账本中维护。履约状态包含 `processing`，以容纳仓库已进入出库处理但尚未发货的门禁阶段；具体改址条件仍由后续业务服务与仓库协同实现。
+支付状态记录支付生命周期，退款金额与预占余额在退款账本中维护。顾客改址与仓库开始出库共享订单行锁。只有本人订单处于 `unshipped` 且未关闭时可以改址，开始出库后状态为 `processing`。改址直接更新 `shipping_address_snapshot`，并递增订单版本。地址字段为 `recipient`、`phone`、`region` 和 `street`。
 
 退货率不存储为浮点数，由可信统计中的分子、分母计算。分母为零、统计缺失或过期时不能直接判低风险。
 

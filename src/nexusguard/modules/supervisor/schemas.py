@@ -122,6 +122,7 @@ class ReplyView(BaseModel):
     text: str
     created_at: datetime
     product_cards: list[ProductCard] = Field(default_factory=list, max_length=3)
+    address_form_order_id: UUID | None = None
 
 
 class MessageView(MessageReceipt):

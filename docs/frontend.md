@@ -130,3 +130,9 @@ python -m nexusguard.tools.demo_customer serve
 发送「我想买一点香蕉」，可查看在售商品卡片。点击卡片会在新标签打开本地商品详情。已运行过演示的环境可重新执行 `setup` 补齐示例香蕉 SKU。
 
 演示香蕉照片缩放自 Evan-Amos 的 [Banana-Single.jpg](https://commons.wikimedia.org/wiki/File:Banana-Single.jpg)，按 [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) 使用。
+
+## 本机自助改址演示
+
+重新执行演示的 `setup` 会补齐已付款、尚未出库的订单 `DEMO-1002`。从客服选中该订单并发送「帮我改一下地址」，可核对并保存新地址。
+
+要体验出库拦截，先保持改址表单打开，再从项目根目录运行 `python -m nexusguard.tools.demo_customer pack`。此命令将该演示订单推进到出库处理中。之后提交表单会收到出库拦截提示。出库状态和已保存的地址会随演示数据库保留。

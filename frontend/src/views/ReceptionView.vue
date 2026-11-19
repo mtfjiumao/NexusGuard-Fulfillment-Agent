@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import DamageDraftPanel from '../components/DamageDraftPanel.vue';
 import MessageComposer from '../components/MessageComposer.vue';
 import OrderCard from '../components/OrderCard.vue';
 import OrderPicker from '../components/OrderPicker.vue';
 import ProductCards from '../components/ProductCards.vue';
+import ShippingAddressForm from '../components/ShippingAddressForm.vue';
 import SuggestedQuestions from '../components/SuggestedQuestions.vue';
 import { useReception } from '../composables/useReception';
 
@@ -25,6 +26,21 @@ const timeline = computed(() => [
     key: `application-${notice.review_id}`, time: notice.created_at, notice,
   })),
 ].sort((a, b) => a.time.localeCompare(b.time) || a.key.localeCompare(b.key)));
+const addressOrder = ref<string | null>(null);
+let lastOpenedReply: string | undefined;
+const boundOrderId = computed(() => view.value?.bound_order?.order_id);
+const latestAddressReply = computed(() => messages.value
+  .find(message => message.message_id === view.value?.latest_message?.message_id)
+  ?.replies.find(reply => Boolean(reply.address_form_order_id)));
+
+watch(boundOrderId, () => { addressOrder.value = null; });
+watch([latestAddressReply, boundOrderId], ([reply, orderId]) => {
+  if (reply && orderId && reply.address_form_order_id === orderId
+      && reply.reply_id !== lastOpenedReply) {
+    lastOpenedReply = reply.reply_id;
+    addressOrder.value = orderId;
+  }
+});
 onMounted(initialize);
 </script>
 
@@ -52,6 +68,9 @@ onMounted(initialize);
         >{{ item.label }}</button>
       </div>
     </section>
+    <ShippingAddressForm v-if="view && addressOrder && addressOrder === boundOrderId"
+      :key="addressOrder" :order-id="addressOrder" :session-id="view.session_id" :disabled="disabled"
+      @close="addressOrder = null" />
     <OrderPicker
       v-if="selecting" :orders="orders" :disabled="disabled"
       :has-more="nextOffset !== null" :failed="ordersFailed"
@@ -77,6 +96,10 @@ onMounted(initialize);
             <template v-for="reply in entry.message.replies" :key="reply.reply_id">
               <div class="assistant-message"><span class="message-author">客服</span>{{ reply.text }}</div>
               <ProductCards :products="reply.product_cards" />
+              <button v-if="reply.address_form_order_id && reply.address_form_order_id === boundOrderId"
+                type="button" :disabled="disabled" @click="addressOrder = reply.address_form_order_id">
+                打开改址表单
+              </button>
             </template>
             <p class="message-status">{{ messageStatus(entry.message.status) }}</p>
           </template>

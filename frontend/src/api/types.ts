@@ -80,6 +80,7 @@ export interface AssistantReply {
   text: string;
   created_at: string;
   product_cards: ProductCard[];
+  address_form_order_id: UUID | null;
 }
 
 export interface ConversationMessage extends MessageReceipt {

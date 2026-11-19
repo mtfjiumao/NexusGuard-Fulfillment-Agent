@@ -5,7 +5,7 @@ import type {
 const prefix = '/api/v1/supervisor/reception';
 
 export class ApiError extends Error {
-  constructor(readonly status: number) {
+  constructor(readonly status: number, readonly code?: string) {
     super('reception_request_failed');
   }
 }
@@ -27,7 +27,10 @@ export async function requestJson<T>(
       body: body === undefined ? undefined : body instanceof File ? body : JSON.stringify(body),
     });
     // Do not display arbitrary upstream diagnostics to the customer.
-    if (!response.ok) throw new ApiError(response.status);
+    if (!response.ok) {
+      const detail = response.status === 409 ? await response.json().catch(() => null) : null;
+      throw new ApiError(response.status, typeof detail?.detail === 'string' ? detail.detail : undefined);
+    }
     return await response.json() as T;
   } finally {
     window.clearTimeout(timeout);

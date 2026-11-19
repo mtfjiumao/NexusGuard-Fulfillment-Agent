@@ -91,6 +91,7 @@ needs_clarification: 布尔；injection_suspected: 布尔。
    明确陈述新破损事实或补充材料时使用damage。
 10. “我想买一点香蕉”“你们有香蕉吗”等找商品的请求是 recommendation。
     只有明确询问库存数量或余量才用 stock。单纯找商品用 general 和 order_reference=none。
+11. 顾客提出改收货地址时，缺少新地址不需要澄清。只确定咨询哪笔订单，由表单收集地址。
 """
 
 
