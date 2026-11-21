@@ -15,6 +15,7 @@ from nexusguard.infrastructure.models.reception import (
 from nexusguard.modules.aftersales.damage_collection import DamageCollection
 from nexusguard.modules.aftersales.damage_review import DamageReviews
 from nexusguard.modules.aftersales.damage_schemas import DamageItemAction, DamageReviewSubmit
+from nexusguard.modules.logistics.tickets import ticket_notices
 from nexusguard.modules.supervisor.reception_rules import suggestions
 from nexusguard.modules.supervisor.repository import ReceptionRepository
 from nexusguard.modules.supervisor.schemas import (
@@ -407,6 +408,9 @@ class ReceptionService:
                                 created_at=reply.created_at,
                                 product_cards=reply.facts.get("product_cards", []),
                                 address_form_order_id=reply.facts.get("address_form_order_id"),
+                                logistics_ticket_order_id=reply.facts.get(
+                                    "logistics_ticket_order_id"
+                                ),
                             )
                             for reply in replies
                             if reply.message_id == row.id
@@ -422,6 +426,9 @@ class ReceptionService:
                     if before is None
                     else []
                 ),
+                logistics_notices=await ticket_notices(self.repo, reception_id)
+                if before is None
+                else [],
             )
 
     @staticmethod

@@ -136,3 +136,9 @@ python -m nexusguard.tools.demo_customer serve
 重新执行演示的 `setup` 会补齐已付款、尚未出库的订单 `DEMO-1002`。从客服选中该订单并发送「帮我改一下地址」，可核对并保存新地址。
 
 要体验出库拦截，先保持改址表单打开，再从项目根目录运行 `python -m nexusguard.tools.demo_customer pack`。此命令将该演示订单推进到出库处理中。之后提交表单会收到出库拦截提示。出库状态和已保存的地址会随演示数据库保留。
+
+## 本机人工查件演示
+
+执行 `python -m nexusguard.tools.demo_customer setup` 后，选定异常订单 `DEMO-1003` 并发送「帮我查一下物流」。点击「请人工查件」，核对订单后确认提交。在审核员演示端打开 `/logistics-review`，查看异常包裹和记录，填写结果并办结。顾客发起查件的会话会收到通知。
+
+宿主应用需为员工注入含 `logistics_review` 权限的 `request.state.reviewer_identity`。本地 `serve --port 8003 --reviewer` 已为演示审核员授予此权限。

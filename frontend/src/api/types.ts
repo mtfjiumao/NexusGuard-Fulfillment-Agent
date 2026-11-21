@@ -81,6 +81,7 @@ export interface AssistantReply {
   created_at: string;
   product_cards: ProductCard[];
   address_form_order_id: UUID | null;
+  logistics_ticket_order_id: UUID | null;
 }
 
 export interface ConversationMessage extends MessageReceipt {
@@ -93,6 +94,13 @@ export interface MessagePage {
   messages: ConversationMessage[];
   next_before: UUID | null;
   application_notices: DamageApplicationNotice[];
+  logistics_notices: LogisticsNotice[];
+}
+
+export interface LogisticsNotice {
+  id: UUID;
+  created_at: string;
+  text: string;
 }
 
 

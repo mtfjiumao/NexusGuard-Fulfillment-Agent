@@ -21,6 +21,10 @@ def get_refund_supervisor(request: Request) -> ReviewerIdentity:
     return require_reviewer_permission(request, "refund_approval")
 
 
+def get_logistics_reviewer(request: Request) -> ReviewerIdentity:
+    return require_reviewer_permission(request, "logistics_review")
+
+
 def require_reviewer_permission(request: Request, permission: str) -> ReviewerIdentity:
     identity = getattr(request.state, "reviewer_identity", None)
     if not isinstance(identity, ReviewerIdentity):

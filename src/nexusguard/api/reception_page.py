@@ -7,7 +7,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
-from nexusguard.api.reviewer import ReviewerIdentity, get_damage_reviewer, get_refund_supervisor
+from nexusguard.api.reviewer import (
+    ReviewerIdentity,
+    get_damage_reviewer,
+    get_logistics_reviewer,
+    get_refund_supervisor,
+)
 
 WEB_DIRECTORY = Path(__file__).resolve().parents[1] / "web" / "dist"
 router = APIRouter()
@@ -33,6 +38,13 @@ async def damage_review_page(
 @router.get("/refund-approvals", include_in_schema=False)
 async def refund_approvals_page(
     reviewer: Annotated[ReviewerIdentity, Depends(get_refund_supervisor)],
+) -> FileResponse:
+    return frontend_page()
+
+
+@router.get("/logistics-review", include_in_schema=False)
+async def logistics_review_page(
+    reviewer: Annotated[ReviewerIdentity, Depends(get_logistics_reviewer)],
 ) -> FileResponse:
     return frontend_page()
 

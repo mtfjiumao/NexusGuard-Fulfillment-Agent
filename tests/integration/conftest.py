@@ -87,6 +87,8 @@ def postgres_url():
             try:
                 async with engine.begin() as connection:
                     tables = await connection.run_sync(lambda sync: inspect(sync).get_table_names())
+                    if "logistics_tickets" in tables:
+                        await connection.execute(text("DELETE FROM logistics_tickets"))
                     if "damage_reviews" in tables:
                         await connection.execute(text("DELETE FROM damage_review_items"))
                         await connection.execute(text("DELETE FROM damage_reviews"))

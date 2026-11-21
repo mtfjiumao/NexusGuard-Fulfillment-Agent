@@ -1,6 +1,6 @@
 import { computed, onScopeDispose, ref } from 'vue';
 import { ApiError, receptionApi } from '../api/reception';
-import type { DamageApplicationNotice } from '../api/types';
+import type { DamageApplicationNotice, LogisticsNotice } from '../api/types';
 import type {
   ActionRequest, ConversationMessage, CreateReception, MessageRequest, MessageStatus, OrderCard, ReceptionAction,
   ReceptionView, UUID,
@@ -33,6 +33,7 @@ export function useReception() {
   let initialized = false;
   let submission: { draftId: UUID; id: UUID; request: string } | undefined;
   const applicationNotices = ref<DamageApplicationNotice[]>([]);
+  const logisticsNotices = ref<LogisticsNotice[]>([]);
 
   const selecting = computed(() => ['selecting', 'clarifying'].includes(view.value?.state ?? ''));
   const activeOrder = computed(() => view.value?.bound_order ?? view.value?.candidate_order ?? null);
@@ -66,6 +67,7 @@ export function useReception() {
     orders.value = [];
     messages.value = [];
     applicationNotices.value = [];
+    logisticsNotices.value = [];
     nextOffset.value = null;
     pending.value = null;
     pendingPhoto.value = null;
@@ -115,6 +117,7 @@ export function useReception() {
     const hadMessages = messages.value.length > 0;
     mergeMessages(page.messages);
     applicationNotices.value = page.application_notices;
+    logisticsNotices.value = page.logistics_notices;
     if (!hadMessages) nextBefore.value = page.next_before;
   }
 
@@ -133,6 +136,7 @@ export function useReception() {
       if (messages.value.length === 0) nextBefore.value = page.next_before;
       mergeMessages(page.messages);
       applicationNotices.value = page.application_notices;
+      logisticsNotices.value = page.logistics_notices;
       syncFailed.value = false;
       if (recovered) announce('咨询记录已同步，可以继续操作。');
     } catch (error) {
@@ -425,7 +429,7 @@ export function useReception() {
 
   return {
     view, busy, notice, hasError, draft, orders, nextOffset, ordersFailed, messages,
-    applicationNotices,
+    applicationNotices, logisticsNotices,
     pending, selecting, activeOrder, disabled, deliveryStatus, nextBefore, syncFailed,
     messageStatus, olderMessages, synchronize, pendingPhoto,
     editDamageItem, uploadDamagePhoto, retryPhoto,

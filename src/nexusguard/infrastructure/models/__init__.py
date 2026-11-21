@@ -12,6 +12,7 @@ from nexusguard.infrastructure.models.catalog import SKU, Inventory
 from nexusguard.infrastructure.models.damage import DamageAttachment, DamageDraft, DamageDraftItem
 from nexusguard.infrastructure.models.damage_review import DamageReview, DamageReviewItem
 from nexusguard.infrastructure.models.events import AuditLog, InboxEvent, OutboxEvent
+from nexusguard.infrastructure.models.logistics_ticket import LogisticsTicket
 from nexusguard.infrastructure.models.orders import LogisticsEvent, Order, OrderItem, Shipment
 from nexusguard.infrastructure.models.payments import FinancialAction, OrderRefundBalance
 from nexusguard.infrastructure.models.reception import (
@@ -37,6 +38,7 @@ __all__ = [
     "InboxEvent",
     "Inventory",
     "LogisticsEvent",
+    "LogisticsTicket",
     "Order",
     "OrderItem",
     "OrderRefundBalance",

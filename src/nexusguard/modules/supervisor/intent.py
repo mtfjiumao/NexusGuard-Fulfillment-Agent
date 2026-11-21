@@ -92,6 +92,7 @@ needs_clarification: 布尔；injection_suspected: 布尔。
 10. “我想买一点香蕉”“你们有香蕉吗”等找商品的请求是 recommendation。
     只有明确询问库存数量或余量才用 stock。单纯找商品用 general 和 order_reference=none。
 11. 顾客提出改收货地址时，缺少新地址不需要澄清。只确定咨询哪笔订单，由表单收集地址。
+12. 顾客想催查包裹、请人工查件或询问人工查件结果时，使用tracking意图。
 """
 
 

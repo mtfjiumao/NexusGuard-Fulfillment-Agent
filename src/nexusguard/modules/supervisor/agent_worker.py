@@ -16,7 +16,14 @@ from nexusguard.core.config import Settings, get_settings
 from nexusguard.core.logging import configure_logging
 from nexusguard.infrastructure.database import build_engine
 from nexusguard.infrastructure.llm import LLMError, ModelGateway
-from nexusguard.infrastructure.models import AuditLog, DamageReview, InboxEvent, Order, OutboxEvent
+from nexusguard.infrastructure.models import (
+    AuditLog,
+    DamageReview,
+    InboxEvent,
+    LogisticsTicket,
+    Order,
+    OutboxEvent,
+)
 from nexusguard.infrastructure.models.reception import (
     ReceptionMessage,
     ReceptionReply,
@@ -30,6 +37,7 @@ from nexusguard.modules.aftersales.damage_review import (
     application_notice,
 )
 from nexusguard.modules.logistics.address import ADDRESS_BLOCKED_TEXT, address_change_blocker
+from nexusguard.modules.logistics.tickets import TICKET_RESOLVED, exception_shipments, latest_ticket
 from nexusguard.modules.payments.refunds import RefundWorker, SimulationOutcome
 from nexusguard.modules.presales.catalog import search_products
 from nexusguard.modules.supervisor.conversation_agent import (
@@ -354,6 +362,12 @@ class AgentWorker:
                     }
                 if command.action == "query_logistics":
                     guidance, facts = await tools.logistics(current_order)
+                    ticket = await latest_ticket(repo, current_order)
+                    if ticket is not None:
+                        facts["investigation"] = ticket.model_dump(mode="json", exclude={"id"})
+                    facts["can_request_investigation"] = bool(
+                        exception_shipments(facts) and (ticket is None or ticket.resolved_at)
+                    )
                     return {"guidance": guidance, "facts": facts}
                 if isinstance(command, CaseAction):
                     guidance, facts = await tools.aftersales(command.topic, current_order)
@@ -629,10 +643,17 @@ class AgentWorker:
         await self.resolve(repo, session, message, intent, mutate=True)
         calls = list(turn.answer.calls)
         products = {}
+        ticket_order_id = None
         for call in calls:
             if call["tool"] == "search_products":
                 for product in call["result"]["products"]:
                     products.setdefault(product["sku_id"], product)
+            if (
+                order is not None
+                and call["tool"] == "query_logistics"
+                and call["result"]["facts"].get("can_request_investigation")
+            ):
+                ticket_order_id = str(order.id)
         if turn.damage is not None:
             _, fact = await DamageCollection(repo).apply(session, order.id, message.id, turn.damage)
             calls.append(fact)
@@ -644,18 +665,27 @@ class AgentWorker:
                 "calls": calls,
                 "product_cards": list(products.values())[:3],
                 "address_form_order_id": address_form_order_id,
+                "logistics_ticket_order_id": ticket_order_id,
                 "agent_model": turn.answer.model,
                 "agent_steps": turn.answer.steps,
             },
         )
 
-    async def notify_damage_application(self) -> bool:
+    async def notify_customer_result(self) -> bool:
         async with self.factory() as db, db.begin():
             event = await db.scalar(
                 select(OutboxEvent)
                 .where(
-                    OutboxEvent.event_type.in_((APPLICATION_RESOLVED, "damage.review_completed")),
-                    OutboxEvent.aggregate_type == "damage_review",
+                    or_(
+                        (
+                            OutboxEvent.event_type.in_(
+                                (APPLICATION_RESOLVED, "damage.review_completed")
+                            )
+                            & (OutboxEvent.aggregate_type == "damage_review")
+                        ),
+                        (OutboxEvent.event_type == TICKET_RESOLVED)
+                        & (OutboxEvent.aggregate_type == "logistics_ticket"),
+                    ),
                     OutboxEvent.published_at.is_(None),
                     OutboxEvent.available_at <= datetime.now(UTC),
                 )
@@ -665,20 +695,21 @@ class AgentWorker:
             )
             if event is None:
                 return False
-            review = await db.get(DamageReview, (event.tenant_id, event.aggregate_id))
-            if (
-                event.event_type == APPLICATION_RESOLVED
-                and review
-                and review.outcome is not None
-                and review.notified_at is None
-            ):
-                review.notice = application_notice(review)
-                review.notified_at = datetime.now(UTC)
+            key = (event.tenant_id, event.aggregate_id)
+            if event.event_type == TICKET_RESOLVED:
+                ticket = await db.get(LogisticsTicket, key)
+                if ticket and ticket.resolved_at is not None and ticket.notified_at is None:
+                    ticket.notified_at = datetime.now(UTC)
+            elif event.event_type == APPLICATION_RESOLVED:
+                review = await db.get(DamageReview, key)
+                if review and review.outcome is not None and review.notified_at is None:
+                    review.notice = application_notice(review)
+                    review.notified_at = datetime.now(UTC)
             self.acknowledge(db, event)
             return True
 
     async def run_once(self) -> bool:
-        notified = await self.notify_damage_application()
+        notified = await self.notify_customer_result()
         refund_advanced = False
         if self.refund_simulation is not None:
             async with self.factory() as db, db.begin():

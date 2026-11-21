@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import DamageDraftPanel from '../components/DamageDraftPanel.vue';
+import LogisticsTicketButton from '../components/LogisticsTicketButton.vue';
 import MessageComposer from '../components/MessageComposer.vue';
 import OrderCard from '../components/OrderCard.vue';
 import OrderPicker from '../components/OrderPicker.vue';
@@ -11,7 +12,7 @@ import { useReception } from '../composables/useReception';
 
 const {
   view, busy, notice, hasError, draft, orders, nextOffset, ordersFailed, messages,
-  applicationNotices,
+  applicationNotices, logisticsNotices,
   pending, selecting, activeOrder, disabled, deliveryStatus, nextBefore, syncFailed,
   messageStatus, olderMessages, synchronize, pendingPhoto,
   editDamageItem, uploadDamagePhoto, retryPhoto,
@@ -23,7 +24,10 @@ const timeline = computed(() => [
     key: message.message_id, time: message.created_at, message,
   })),
   ...applicationNotices.value.map(notice => ({
-    key: `application-${notice.review_id}`, time: notice.created_at, notice,
+    key: `application-${notice.review_id}`, time: notice.created_at, notice, label: '人工处理结果',
+  })),
+  ...logisticsNotices.value.map(notice => ({
+    key: `logistics-${notice.id}`, time: notice.created_at, notice, label: '人工查件结果',
   })),
 ].sort((a, b) => a.time.localeCompare(b.time) || a.key.localeCompare(b.key)));
 const addressOrder = ref<string | null>(null);
@@ -100,11 +104,15 @@ onMounted(initialize);
                 type="button" :disabled="disabled" @click="addressOrder = reply.address_form_order_id">
                 打开改址表单
               </button>
+              <LogisticsTicketButton
+                v-if="view?.bound_order && reply.logistics_ticket_order_id === view.bound_order.order_id"
+                :session-id="view.session_id" :order-id="view.bound_order.order_id"
+                :order-number="view.bound_order.order_number" :reply-id="reply.reply_id" :disabled="disabled" />
             </template>
             <p class="message-status">{{ messageStatus(entry.message.status) }}</p>
           </template>
           <div v-else class="assistant-message">
-            <span class="message-author">客服 · 人工处理结果</span>{{ entry.notice.text }}
+            <span class="message-author">客服 · {{ entry.label }}</span>{{ entry.notice.text }}
           </div>
         </li>
       </ol>

@@ -20,7 +20,16 @@ from nexusguard.api.customer import CustomerIdentity
 from nexusguard.api.reviewer import ReviewerIdentity
 from nexusguard.core.config import Settings, get_settings
 from nexusguard.infrastructure.database import build_engine
-from nexusguard.infrastructure.models import SKU, Order, OrderItem, Tenant, User, UserRiskProfile
+from nexusguard.infrastructure.models import (
+    SKU,
+    LogisticsEvent,
+    Order,
+    OrderItem,
+    Shipment,
+    Tenant,
+    User,
+    UserRiskProfile,
+)
 from nexusguard.main import create_app
 from nexusguard.modules.logistics.address import start_packing
 from nexusguard.modules.payments.refunds import SimulationOutcome
@@ -36,6 +45,9 @@ ITEM_ID = uuid5(NAMESPACE_URL, "nexusguard/local-demo/order-item")
 BANANA_SKU_ID = uuid5(NAMESPACE_URL, "nexusguard/local-demo/banana")
 ADDRESS_ORDER_ID = uuid5(NAMESPACE_URL, "nexusguard/local-demo/address-order")
 ADDRESS_ITEM_ID = uuid5(NAMESPACE_URL, "nexusguard/local-demo/address-item")
+LOGISTICS_ORDER_ID = uuid5(NAMESPACE_URL, "nexusguard/local-demo/logistics-order")
+LOGISTICS_ITEM_ID = uuid5(NAMESPACE_URL, "nexusguard/local-demo/logistics-item")
+LOGISTICS_SHIPMENT_ID = uuid5(NAMESPACE_URL, "nexusguard/local-demo/logistics-shipment")
 
 
 def demo_settings() -> Settings:
@@ -167,6 +179,7 @@ async def setup(*, high_risk: bool = False) -> None:
             ]
             for statement in rows:
                 await db.execute(statement)
+            await seed_logistics_demo(db, ordered)
             await db.execute(
                 insert(UserRiskProfile).values(
                     tenant_id=TENANT_ID,
@@ -181,6 +194,54 @@ async def setup(*, high_risk: bool = False) -> None:
             )
     finally:
         await engine.dispose()
+
+
+async def seed_logistics_demo(db, ordered: datetime) -> None:
+    ordered -= timedelta(hours=1)
+    rows = [
+        insert(Order).values(
+            tenant_id=TENANT_ID,
+            id=LOGISTICS_ORDER_ID,
+            user_id=USER_ID,
+            order_number="DEMO-1003",
+            payment_status="paid",
+            fulfillment_status="shipped",
+            paid_amount_cents=1290,
+            ordered_at=ordered,
+            paid_at=ordered,
+            shipping_address_snapshot={},
+        ),
+        insert(OrderItem).values(
+            tenant_id=TENANT_ID,
+            id=LOGISTICS_ITEM_ID,
+            order_id=LOGISTICS_ORDER_ID,
+            sku_id=BANANA_SKU_ID,
+            quantity=1,
+            paid_amount_cents=1290,
+            category_snapshot="fresh",
+            sku_snapshot={"title": "进口香蕉"},
+        ),
+        insert(Shipment).values(
+            tenant_id=TENANT_ID,
+            id=LOGISTICS_SHIPMENT_ID,
+            order_id=LOGISTICS_ORDER_ID,
+            carrier="演示快递",
+            tracking_no="NG-DEMO-1003",
+            status="exception",
+            shipped_at=ordered + timedelta(hours=2),
+            promised_delivery_at=ordered + timedelta(days=1),
+        ),
+        insert(LogisticsEvent).values(
+            tenant_id=TENANT_ID,
+            shipment_id=LOGISTICS_SHIPMENT_ID,
+            source="demo",
+            source_event_id="exception-1003",
+            event_type="exception",
+            occurred_at=ordered + timedelta(hours=16),
+        ),
+    ]
+    for statement in rows:
+        await db.execute(statement.on_conflict_do_nothing())
 
 
 async def pack_demo_order() -> None:
@@ -245,7 +306,7 @@ def create_demo_app(
             )
         elif reviewer:
             request.state.reviewer_identity = ReviewerIdentity(
-                TENANT_ID, "demo-reviewer", frozenset({"damage_review"})
+                TENANT_ID, "demo-reviewer", frozenset({"damage_review", "logistics_review"})
             )
         else:
             request.state.customer_identity = CustomerIdentity(TENANT_ID, USER_ID)
