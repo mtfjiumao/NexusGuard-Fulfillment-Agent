@@ -125,6 +125,7 @@ class ReplyView(BaseModel):
     product_cards: list[ProductCard] = Field(default_factory=list, max_length=3)
     address_form_order_id: UUID | None = None
     logistics_ticket_order_id: UUID | None = None
+    delay_application_order_id: UUID | None = None
 
 
 class MessageView(MessageReceipt):

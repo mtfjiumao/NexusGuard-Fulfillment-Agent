@@ -142,3 +142,9 @@ python -m nexusguard.tools.demo_customer serve
 执行 `python -m nexusguard.tools.demo_customer setup` 后，选定异常订单 `DEMO-1003` 并发送「帮我查一下物流」。点击「请人工查件」，核对订单后确认提交。在审核员演示端打开 `/logistics-review`，查看异常包裹和记录，填写结果并办结。顾客发起查件的会话会收到通知。
 
 宿主应用需为员工注入含 `logistics_review` 权限的 `request.state.reviewer_identity`。本地 `serve --port 8003 --reviewer` 已为演示审核员授予此权限。
+
+### 超时赔付
+
+在 `DEMO-1003` 的同一会话提问「这单已经超时，能申请赔付吗？」，然后点击「申请超时赔付」并确认。物流工单工作台显示承诺送达时间、实际签收时间和轨迹。审核员填写处理结论，同意退款时同时填写金额。客服会话显示人工结果、核准金额和退款进度，高风险退款仍由独立主管审批。
+
+超时赔付工单还要求 `delay_compensation_review` 权限，本地审核员已具有该权限。赔付使用现有模拟退款渠道，每笔人工批准的退款申请独立去重，同一订单的已退与预留金额合计受实付额度约束。

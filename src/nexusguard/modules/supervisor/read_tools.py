@@ -103,6 +103,7 @@ class ReadOnlyTools:
                 "tracking_no": shipment.tracking_no,
                 "status": shipment.status,
                 "promised_delivery_at": stamp(shipment.promised_delivery_at),
+                "delivered_at": stamp(shipment.delivered_at),
                 "last_update_at": stamp(last),
                 "recent_events": [
                     {"type": e.event_type, "at": stamp(e.occurred_at)} for e in events
@@ -196,7 +197,6 @@ class ReadOnlyTools:
             "refund": "退款",
             "return": "退货",
             "exchange": "换货",
-            "delay_compensation": "超时赔付",
         }
         requirements = "请说明希望处理的商品、原因及数量。"
         return (

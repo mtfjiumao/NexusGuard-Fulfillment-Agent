@@ -89,7 +89,7 @@ npm run dev
 Dockerfile 会自动完成前端构建；纯 API 开发不要求预先构建前端。
 
 会话、消息及回复保存到 PostgreSQL；Outbox 消费者执行意图识别与受控查询。先执行
-`alembic upgrade head` 应用到 `0008_logistics_ticket`，再另开终端启动后台进程：
+`alembic upgrade head` 应用到 `0010_refund_application_scope`，再另开终端启动后台进程：
 
 ```bash
 python -m nexusguard.modules.supervisor.agent_worker

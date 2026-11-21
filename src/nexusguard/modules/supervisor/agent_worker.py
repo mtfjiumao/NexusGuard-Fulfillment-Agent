@@ -37,7 +37,12 @@ from nexusguard.modules.aftersales.damage_review import (
     application_notice,
 )
 from nexusguard.modules.logistics.address import ADDRESS_BLOCKED_TEXT, address_change_blocker
-from nexusguard.modules.logistics.tickets import TICKET_RESOLVED, exception_shipments, latest_ticket
+from nexusguard.modules.logistics.tickets import (
+    TICKET_RESOLVED,
+    delayed_shipments,
+    exception_shipments,
+    latest_ticket,
+)
 from nexusguard.modules.payments.refunds import RefundWorker, SimulationOutcome
 from nexusguard.modules.presales.catalog import search_products
 from nexusguard.modules.supervisor.conversation_agent import (
@@ -370,6 +375,24 @@ class AgentWorker:
                     )
                     return {"guidance": guidance, "facts": facts}
                 if isinstance(command, CaseAction):
+                    if command.topic == "delay_compensation":
+                        _, facts = await tools.logistics(current_order)
+                        ticket = await latest_ticket(repo, current_order, "delay_compensation")
+                        if ticket is not None:
+                            facts["delay_application"] = ticket.model_dump(
+                                mode="json", exclude={"id"}
+                            )
+                        facts["can_request_delay_compensation"] = bool(
+                            delayed_shipments(facts)
+                            and (
+                                ticket is None
+                                or (ticket.resolved_at and not ticket.compensation_approved)
+                            )
+                        )
+                        return {
+                            "guidance": "说明承诺送达时间和签收状态。赔付由人工决定。",
+                            "facts": facts,
+                        }
                     guidance, facts = await tools.aftersales(command.topic, current_order)
                     if damage_review and command.topic in review_topics:
                         facts["damage_review"] = damage_review
@@ -644,6 +667,7 @@ class AgentWorker:
         calls = list(turn.answer.calls)
         products = {}
         ticket_order_id = None
+        delay_order_id = None
         for call in calls:
             if call["tool"] == "search_products":
                 for product in call["result"]["products"]:
@@ -654,6 +678,12 @@ class AgentWorker:
                 and call["result"]["facts"].get("can_request_investigation")
             ):
                 ticket_order_id = str(order.id)
+            if (
+                order is not None
+                and call["tool"] == "query_aftersales"
+                and call["result"]["facts"].get("can_request_delay_compensation")
+            ):
+                delay_order_id = str(order.id)
         if turn.damage is not None:
             _, fact = await DamageCollection(repo).apply(session, order.id, message.id, turn.damage)
             calls.append(fact)
@@ -666,6 +696,7 @@ class AgentWorker:
                 "product_cards": list(products.values())[:3],
                 "address_form_order_id": address_form_order_id,
                 "logistics_ticket_order_id": ticket_order_id,
+                "delay_application_order_id": delay_order_id,
                 "agent_model": turn.answer.model,
                 "agent_steps": turn.answer.steps,
             },

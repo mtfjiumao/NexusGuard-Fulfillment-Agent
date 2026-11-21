@@ -238,7 +238,7 @@ def test_damage_application_and_simulated_refund(db, settings, scenario, high_ri
                 )
                 assert len(actions) == int(approved)
                 if approved:
-                    assert actions[0].idempotency_key == f"{ids.order}:REFUND"
+                    assert actions[0].idempotency_key == f"case:{actions[0].case_id}:REFUND"
                     balance = await session.scalar(
                         select(OrderRefundBalance).where(
                             OrderRefundBalance.tenant_id == ids.tenant,

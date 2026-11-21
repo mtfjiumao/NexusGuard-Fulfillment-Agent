@@ -27,7 +27,7 @@ const timeline = computed(() => [
     key: `application-${notice.review_id}`, time: notice.created_at, notice, label: '人工处理结果',
   })),
   ...logisticsNotices.value.map(notice => ({
-    key: `logistics-${notice.id}`, time: notice.created_at, notice, label: '人工查件结果',
+    key: `logistics-${notice.id}`, time: notice.created_at, notice, label: '物流处理结果',
   })),
 ].sort((a, b) => a.time.localeCompare(b.time) || a.key.localeCompare(b.key)));
 const addressOrder = ref<string | null>(null);
@@ -106,8 +106,15 @@ onMounted(initialize);
               </button>
               <LogisticsTicketButton
                 v-if="view?.bound_order && reply.logistics_ticket_order_id === view.bound_order.order_id"
+                kind="investigation"
                 :session-id="view.session_id" :order-id="view.bound_order.order_id"
                 :order-number="view.bound_order.order_number" :reply-id="reply.reply_id" :disabled="disabled" />
+              <LogisticsTicketButton
+                v-if="view?.bound_order && reply.delay_application_order_id === view.bound_order.order_id"
+                kind="delay_compensation"
+                :session-id="view.session_id" :order-id="view.bound_order.order_id"
+                :order-number="view.bound_order.order_number"
+                :reply-id="reply.reply_id" :disabled="disabled" />
             </template>
             <p class="message-status">{{ messageStatus(entry.message.status) }}</p>
           </template>

@@ -32,7 +32,11 @@ from nexusguard.modules.aftersales.damage_schemas import (
     StaffDamageReviewItemView,
     StaffDamageReviewView,
 )
-from nexusguard.modules.payments.refunds import prepare_refund, refund_status_text
+from nexusguard.modules.payments.refunds import (
+    HumanRefundDecision,
+    prepare_refund,
+    refund_status_text,
+)
 
 APPLICATION_RESOLVED = "damage.application_resolved"
 OUTCOME_LABELS = {
@@ -463,7 +467,21 @@ class DamageReviews:
         review.resolver_id = reviewer.reviewer_id
         review.resolved_at = datetime.now(UTC)
         if data.refund_cents is not None:
-            await prepare_refund(self.db, review, order, trace_id)
+            review.refund_case_id = await prepare_refund(
+                self.db,
+                HumanRefundDecision(
+                    application_id=review.id,
+                    claim_type="damage_compensation",
+                    amount_cents=data.refund_cents,
+                    reviewer_id=reviewer.reviewer_id,
+                    request=review.requested_resolution,
+                    resolution=data.resolution,
+                    reason=data.reason,
+                    revision=review.revision,
+                ),
+                order,
+                trace_id,
+            )
         self.db.add(
             OutboxEvent(
                 tenant_id=self.tenant_id,

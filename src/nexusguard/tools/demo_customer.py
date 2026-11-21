@@ -32,6 +32,7 @@ from nexusguard.infrastructure.models import (
 )
 from nexusguard.main import create_app
 from nexusguard.modules.logistics.address import start_packing
+from nexusguard.modules.logistics.tickets import DELAY_REVIEW_PERMISSION
 from nexusguard.modules.payments.refunds import SimulationOutcome
 from nexusguard.modules.supervisor.agent_worker import AgentWorker
 
@@ -306,7 +307,9 @@ def create_demo_app(
             )
         elif reviewer:
             request.state.reviewer_identity = ReviewerIdentity(
-                TENANT_ID, "demo-reviewer", frozenset({"damage_review", "logistics_review"})
+                TENANT_ID,
+                "demo-reviewer",
+                frozenset({"damage_review", "logistics_review", DELAY_REVIEW_PERMISSION}),
             )
         else:
             request.state.customer_identity = CustomerIdentity(TENANT_ID, USER_ID)

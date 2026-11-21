@@ -82,6 +82,9 @@ class FinancialAction(TenantEntity, MutableRecord, Base):
             ],
         ),
         sa.UniqueConstraint("tenant_id", "idempotency_key"),
+        sa.UniqueConstraint(
+            "tenant_id", "case_id", "action_type", name="uq_financial_action_case_type"
+        ),
         sa.UniqueConstraint("provider", "provider_request_id"),
         sa.UniqueConstraint("provider", "provider_transaction_id"),
         sa.CheckConstraint("eligibility = 'eligible'", name="eligible_decision"),

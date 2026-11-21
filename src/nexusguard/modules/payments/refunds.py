@@ -1,12 +1,13 @@
 """Durable simulation for refunds authorized by an after-sales reviewer."""
 
 import json
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from typing import Literal
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import exists, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nexusguard.domain.enums import ApprovalStatus, Eligibility, FinancialActionStatus, RiskLevel
@@ -18,6 +19,7 @@ from nexusguard.infrastructure.models import (
     AuditLog,
     DamageReview,
     FinancialAction,
+    LogisticsTicket,
     Order,
     OrderRefundBalance,
     PolicyDecision,
@@ -28,6 +30,20 @@ from nexusguard.infrastructure.models import (
 
 SimulationOutcome = Literal["success", "failure", "unknown"]
 PROVIDER = "nexusguard_simulator"
+
+
+@dataclass(frozen=True)
+class HumanRefundDecision:
+    application_id: UUID
+    claim_type: Literal["damage_compensation", "delay_compensation"]
+    amount_cents: int
+    reviewer_id: str
+    request: str
+    resolution: str
+    reason: str
+    revision: int = 1
+
+
 STATE_TEXT = {
     State.WAITING_APPROVAL: "退款正在等待主管审批。",
     State.READY_TO_EXECUTE: "退款已排队，等待模拟渠道处理。",
@@ -82,11 +98,11 @@ def audit_transition(
 
 
 async def prepare_refund(
-    db: AsyncSession, review: DamageReview, order: Order, trace_id: UUID
-) -> None:
-    amount = review.refund_cents
-    if amount is None or review.outcome != "approved" or review.refund_currency != order.currency:
-        raise ValueError("refund_requires_human_resolution")
+    db: AsyncSession, review: HumanRefundDecision, order: Order, trace_id: UUID
+) -> UUID:
+    amount = review.amount_cents
+    if not 0 < amount <= order.paid_amount_cents or not review.reviewer_id:
+        raise ValueError("invalid_human_refund_decision")
     now = datetime.now(UTC)
     profile = await db.scalar(
         select(UserRiskProfile)
@@ -113,25 +129,27 @@ async def prepare_refund(
     case = AfterSalesCase(
         tenant_id=order.tenant_id,
         id=case_id,
-        case_number=f"DAMAGE-{review.id}",
+        case_number=f"{review.claim_type}-{review.application_id}",
         order_id=order.id,
         user_id=order.user_id,
         currency=order.currency,
-        claim_type="damage_compensation",
+        claim_type=review.claim_type,
         requested_amount_cents=amount,
         approved_amount_cents=amount,
-        reason=review.requested_resolution,
+        reason=review.request,
     )
     db.add(case)
     await db.flush()
     facts = {
-        "application_id": str(review.id),
+        "application_id": str(review.application_id),
         "revision": review.revision,
         "order_id": str(order.id),
         "currency": order.currency,
         "paid_amount_cents": order.paid_amount_cents,
         "approved_refund_cents": amount,
-        "resolved_by": review.resolver_id,
+        "resolved_by": review.reviewer_id,
+        "resolution": review.resolution,
+        "resolution_reason": review.reason,
     }
     workflow = WorkflowInstance(
         tenant_id=order.tenant_id,
@@ -147,7 +165,7 @@ async def prepare_refund(
         case_id=case_id,
         currency=order.currency,
         decision_version=1,
-        policy_version="human-damage-resolution-v1",
+        policy_version="human-refund-resolution-v1",
         fact_snapshot=facts,
         facts_hash=digest(facts),
         matched_rule_ids=["human_approval"],
@@ -199,15 +217,22 @@ async def prepare_refund(
         )
     else:
         transition(workflow, State.READY_TO_EXECUTE)
-    review.refund_case_id = case_id
     audit_transition(db, workflow, State.RECEIVED, trace_id)
+    return case_id
 
 
 def scheduled_refunds():
-    return select(WorkflowInstance).join(
-        DamageReview,
-        (DamageReview.tenant_id == WorkflowInstance.tenant_id)
-        & (DamageReview.refund_case_id == WorkflowInstance.case_id),
+    return select(WorkflowInstance).where(
+        or_(
+            exists().where(
+                DamageReview.tenant_id == WorkflowInstance.tenant_id,
+                DamageReview.refund_case_id == WorkflowInstance.case_id,
+            ),
+            exists().where(
+                LogisticsTicket.tenant_id == WorkflowInstance.tenant_id,
+                LogisticsTicket.refund_case_id == WorkflowInstance.case_id,
+            ),
+        )
     )
 
 
@@ -262,11 +287,12 @@ class RefundWorker:
             ):
                 raise RuntimeError("refund_approval_required")
 
-        key = f"{order.id}:REFUND"
+        key = f"case:{case.id}:REFUND"
         existing_action = await self.db.scalar(
             select(FinancialAction.id).where(
                 FinancialAction.tenant_id == order.tenant_id,
-                FinancialAction.idempotency_key == key,
+                FinancialAction.case_id == case.id,
+                FinancialAction.action_type == "refund",
             )
         )
         balance = await self.balance(case)
@@ -282,7 +308,7 @@ class RefundWorker:
             self.fail(
                 workflow,
                 case,
-                "refund_already_attempted" if existing_action else "budget_unavailable",
+                "refund_application_already_attempted" if existing_action else "budget_unavailable",
             )
             return
         if balance is None:

@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { logisticsTickets } from '../api/logisticsTickets';
+import type { TicketKind } from '../api/logisticsTickets';
 import { ApiError } from '../api/reception';
 import type { UUID } from '../api/types';
 
 const props = defineProps<{
   sessionId: UUID; orderId: UUID; replyId: UUID; orderNumber: string; disabled: boolean;
+  kind: TicketKind;
 }>();
+const label = computed(() => props.kind === 'delay_compensation' ? '申请超时赔付' : '请人工查件');
 const confirming = ref(false);
 const busy = ref(false);
 const submitted = ref(false);
@@ -17,12 +20,12 @@ async function submit() {
   busy.value = true;
   notice.value = '';
   try {
-    const ticket = await logisticsTickets.submit(props.sessionId, props.orderId, props.replyId);
+    const ticket = await logisticsTickets.submit(props.sessionId, props.orderId, props.replyId, props.kind);
     submitted.value = true;
     confirming.value = false;
     notice.value = ticket.resolved_at
-      ? '这次查件已处理，请查看会话通知。'
-      : '人工查件正在处理，办结后会通知你。';
+      ? '这次申请已处理，请查看会话通知。'
+      : '已提交人工处理，办结后会通知你。';
   } catch (error) {
     if (error instanceof ApiError && error.code === 'logistics_exception_cleared') {
       notice.value = '物流状态已有更新，请重新查询包裹进度。';
@@ -41,11 +44,11 @@ async function submit() {
 <template>
   <div>
     <div v-if="confirming" class="context">
-      <p>提交订单 {{ orderNumber }} 的物流记录，请工作人员查件。</p>
+      <p>提交订单 {{ orderNumber }} 的物流记录，由工作人员处理「{{ label }}」。</p>
       <button class="send" type="button" :disabled="disabled || busy" @click="submit">确认提交</button>
       <button type="button" :disabled="busy" @click="confirming = false">取消</button>
     </div>
-    <button v-else-if="!submitted" type="button" :disabled="disabled" @click="confirming = true">请人工查件</button>
+    <button v-else-if="!submitted" type="button" :disabled="disabled" @click="confirming = true">{{ label }}</button>
     <p v-if="notice" role="status">{{ notice }}</p>
   </div>
 </template>

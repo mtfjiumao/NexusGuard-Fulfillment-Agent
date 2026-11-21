@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue';
 import { logisticsTickets } from '../api/logisticsTickets';
 import type { StaffTicket } from '../api/logisticsTickets';
 import { ApiError } from '../api/reception';
+import { formatAmount } from '../api/damageReview';
 
 const tickets = ref<StaffTicket[]>([]);
 const resolved = ref(false);
@@ -40,17 +41,31 @@ async function finish(event: SubmitEvent, ticket: StaffTicket) {
   const fields = new FormData(event.currentTarget as HTMLFormElement);
   const result = String(fields.get('result') ?? '').trim();
   if (!result) {
-    notice.value = '请填写查件结果。';
+    notice.value = '请填写处理结果。';
     return;
+  }
+  const amount = String(fields.get('compensation') ?? '').trim();
+  let refundCents: number | null = null;
+  if (amount) {
+    const [whole, decimal = ''] = amount.split('.');
+    const cents = Number(whole) * 100 + Number(decimal.padEnd(2, '0'));
+    if (!/^\d+(\.\d{1,2})?$/.test(amount) || !Number.isSafeInteger(cents) || cents <= 0) {
+      notice.value = '请输入大于 0 且最多保留两位小数的赔付金额。';
+      return;
+    }
+    refundCents = cents;
   }
   busy.value = true;
   try {
-    await logisticsTickets.resolve(ticket.id, result);
+    await logisticsTickets.resolve(ticket.id, result, refundCents);
     tickets.value = tickets.value.filter(row => row.id !== ticket.id);
     notice.value = '已办结，结果会发回顾客的客服会话。';
   } catch (error) {
     notice.value = error instanceof ApiError && error.status === 409
-      ? '工单已由其他员工处理，请刷新队列。' : '暂时无法确认保存结果，请重试。';
+      ? '工单已由其他员工处理，请刷新队列。'
+      : error instanceof ApiError && error.status === 422
+        ? '请核对订单状态、实付金额和赔付金额。'
+        : '暂时无法确认保存结果，请重试。';
   } finally {
     busy.value = false;
   }
@@ -62,7 +77,7 @@ onMounted(() => refresh());
 <template>
   <main class="review-workspace" aria-labelledby="logistics-title" :aria-busy="busy">
     <header class="review-header">
-      <h1 id="logistics-title">人工查件</h1>
+      <h1 id="logistics-title">物流工单</h1>
       <p class="notice" role="status">{{ notice }}</p>
     </header>
     <div class="review-toolbar">
@@ -76,11 +91,12 @@ onMounted(() => refresh());
     </div>
     <p v-if="!tickets.length && !busy && !notice">当前没有工单。</p>
     <article v-for="ticket in tickets" :key="ticket.id" class="context">
-      <h2>订单 {{ ticket.order_number }}</h2>
+      <h2>{{ ticket.kind === 'delay_compensation' ? '超时赔付' : '人工查件' }} · {{ ticket.order_number }}</h2>
       <p>创建于 {{ date(ticket.created_at) }} · 物流记录截至 {{ date(ticket.facts.observed_at) }}</p>
       <details v-for="shipment in ticket.facts.shipments" :key="shipment.shipment_id" open>
         <summary>{{ shipment.carrier }} · {{ shipment.tracking_no ?? '暂无运单号' }} · {{ shipmentStatus[shipment.status] ?? shipment.status }}</summary>
         <p>承诺送达 {{ date(shipment.promised_delivery_at) }} · 最近更新 {{ date(shipment.last_update_at) }}</p>
+        <p v-if="ticket.kind === 'delay_compensation'">签收时间 {{ date(shipment.delivered_at ?? null) }}</p>
         <ul v-if="shipment.recent_events.length">
           <li v-for="(item, index) in shipment.recent_events" :key="index">{{ date(item.at) }} · {{ item.type }}</li>
         </ul>
@@ -88,9 +104,16 @@ onMounted(() => refresh());
       <template v-if="ticket.resolved_at">
         <p>处理于 {{ date(ticket.resolved_at) }} · {{ ticket.reviewer_id }}</p>
         <p class="review-description">{{ ticket.result }}</p>
+        <p v-if="ticket.compensation_cents !== null && ticket.currency">
+          人工核准 {{ formatAmount(ticket.compensation_cents, ticket.currency) }} · {{ ticket.refund_status_text }}
+        </p>
       </template>
       <form v-else class="review-form" @submit.prevent="finish($event, ticket)">
-        <label>查件结果（顾客可见）<textarea name="result" rows="3" maxlength="1000" required :disabled="busy" /></label>
+        <label>处理结果（顾客可见）<textarea name="result" rows="3" maxlength="1000" required :disabled="busy" /></label>
+        <label v-if="ticket.kind === 'delay_compensation'">
+          同意退款时填写赔付金额
+          <input name="compensation" inputmode="decimal" :disabled="busy" />
+        </label>
         <button class="send" type="submit" :disabled="busy">办结并通知顾客</button>
       </form>
     </article>

@@ -411,6 +411,9 @@ class ReceptionService:
                                 logistics_ticket_order_id=reply.facts.get(
                                     "logistics_ticket_order_id"
                                 ),
+                                delay_application_order_id=reply.facts.get(
+                                    "delay_application_order_id"
+                                ),
                             )
                             for reply in replies
                             if reply.message_id == row.id

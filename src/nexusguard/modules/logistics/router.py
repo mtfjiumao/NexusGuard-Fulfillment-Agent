@@ -23,12 +23,14 @@ from nexusguard.modules.logistics.address import (
     change_address,
 )
 from nexusguard.modules.logistics.tickets import (
+    DELAY_REVIEW_PERMISSION,
     StaffTicketView,
     TicketRequest,
     TicketResolution,
     TicketView,
     resolve_ticket,
     submit_ticket,
+    ticket_view,
 )
 from nexusguard.modules.supervisor.repository import ReceptionRepository
 
@@ -115,7 +117,7 @@ async def request_investigation(
                 ReceptionRepository(db, identity),
                 session_id,
                 order_id,
-                data.ticket_id,
+                data,
                 UUID(request.state.request_id),
             )
     except IntegrityError as error:
@@ -132,6 +134,8 @@ async def investigation_queue(
 ) -> list[StaffTicketView]:
     response.headers["Cache-Control"] = "private, no-store"
     query = select(LogisticsTicket).where(LogisticsTicket.tenant_id == reviewer.tenant_id)
+    if DELAY_REVIEW_PERMISSION not in reviewer.permissions:
+        query = query.where(LogisticsTicket.kind == "investigation")
     if resolved:
         query = query.where(LogisticsTicket.resolved_at.is_not(None)).order_by(
             LogisticsTicket.resolved_at.desc(),
@@ -143,7 +147,7 @@ async def investigation_queue(
             LogisticsTicket.id,
         )
     rows = await db.scalars(query.offset(offset).limit(20))
-    return [StaffTicketView.model_validate(row) for row in rows]
+    return [await ticket_view(db, row, StaffTicketView) for row in rows]
 
 
 @router.post("/tickets/{ticket_id}/resolution", response_model=StaffTicketView)
@@ -161,6 +165,6 @@ async def resolve_investigation(
             db,
             reviewer,
             ticket_id,
-            data.result,
+            data,
             UUID(request.state.request_id),
         )

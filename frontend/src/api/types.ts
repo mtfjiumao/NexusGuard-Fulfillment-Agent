@@ -82,6 +82,7 @@ export interface AssistantReply {
   product_cards: ProductCard[];
   address_form_order_id: UUID | null;
   logistics_ticket_order_id: UUID | null;
+  delay_application_order_id: UUID | null;
 }
 
 export interface ConversationMessage extends MessageReceipt {

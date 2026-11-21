@@ -1,4 +1,4 @@
-"""Supervisor approval for high-risk damage refunds."""
+"""Supervisor approval for high-risk after-sales refunds."""
 
 from datetime import UTC, datetime
 from typing import Annotated, Literal
@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from nexusguard.api.reviewer import ReviewerIdentity, get_refund_supervisor
@@ -17,6 +17,7 @@ from nexusguard.infrastructure.models import (
     AfterSalesCase,
     ApprovalRequest,
     DamageReview,
+    LogisticsTicket,
     RiskAssessment,
     WorkflowInstance,
 )
@@ -35,11 +36,16 @@ class Decision(BaseModel):
 
 def requests_for(tenant_id: UUID):
     return (
-        select(ApprovalRequest, DamageReview, RiskAssessment, AfterSalesCase)
-        .join(
+        select(ApprovalRequest, DamageReview, LogisticsTicket, RiskAssessment, AfterSalesCase)
+        .outerjoin(
             DamageReview,
             (DamageReview.tenant_id == ApprovalRequest.tenant_id)
             & (DamageReview.refund_case_id == ApprovalRequest.case_id),
+        )
+        .outerjoin(
+            LogisticsTicket,
+            (LogisticsTicket.tenant_id == ApprovalRequest.tenant_id)
+            & (LogisticsTicket.refund_case_id == ApprovalRequest.case_id),
         )
         .join(
             RiskAssessment,
@@ -51,7 +57,10 @@ def requests_for(tenant_id: UUID):
             (AfterSalesCase.tenant_id == ApprovalRequest.tenant_id)
             & (AfterSalesCase.id == ApprovalRequest.case_id),
         )
-        .where(ApprovalRequest.tenant_id == tenant_id)
+        .where(
+            ApprovalRequest.tenant_id == tenant_id,
+            or_(DamageReview.id.is_not(None), LogisticsTicket.id.is_not(None)),
+        )
     )
 
 
@@ -70,17 +79,17 @@ async def queue(reviewer: Supervisor, db: Database, response: Response):
     return [
         {
             "approval_id": approval.id,
-            "order_number": review.order_number,
+            "order_number": review.order_number if review else ticket.order_number,
             "user_id": case.user_id,
             "amount_cents": approval.amount_cents,
             "currency": approval.currency,
             "reasons": risk.triggered_rules,
-            "requested_resolution": review.requested_resolution,
-            "resolution_reason": review.resolution_reason,
-            "resolution": review.resolution,
+            "requested_resolution": review.requested_resolution if review else case.reason,
+            "resolution_reason": review.resolution_reason if review else ticket.result,
+            "resolution": review.resolution if review else "人工同意超时赔付",
             "expires_at": approval.expires_at,
         }
-        for approval, review, risk, case in rows
+        for approval, review, ticket, risk, case in rows
     ]
 
 
@@ -100,8 +109,8 @@ async def decide(
         ).one_or_none()
         if row is None:
             raise HTTPException(404, "refund_approval_not_found")
-        approval, review, _, case = row
-        if reviewer.reviewer_id == review.resolver_id:
+        approval, review, ticket, _, case = row
+        if reviewer.reviewer_id == (review.resolver_id if review else ticket.reviewer_id):
             raise HTTPException(403, "independent_supervisor_required")
         workflow = await db.get(
             WorkflowInstance,
